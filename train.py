@@ -28,7 +28,7 @@ def train():
 
     try:
         for e in range(1000):
-            print(f"epoch", 0)
+            print(f"epoch", e)
             it = Dataloader(batch_size=16, block_size=128)()
             for x, y in it:
                 loss = step_fn(model=m, optimizer=optimizer, x=x, y=y)
