@@ -1,2 +1,2 @@
-# tiny_moe
-A tiny mixture of experts model
+# Tiny MoE
+The tiniest mixture-of-experts language model.
