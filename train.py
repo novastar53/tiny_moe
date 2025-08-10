@@ -13,7 +13,7 @@ def loss_fn(model, state, x, y):
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, y)
     return loss.mean()
 
-
+@nnx.jit
 def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
     loss, grads = nnx.value_and_grad(loss_fn)(model, optimizer, x, y)
     optimizer.update(model, grads)
@@ -27,7 +27,7 @@ def train():
     optimizer = nnx.Optimizer(m, tx, wrt=nnx.Param)
 
     try:
-        for e in range(100):
+        for e in range(1000):
             print(f"epoch", 0)
             it = Dataloader(batch_size=16, block_size=128)()
             for x, y in it:
