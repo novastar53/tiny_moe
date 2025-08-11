@@ -23,16 +23,16 @@ def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
 def train():
     config = Config()
     m = Tiny_MoE(config, nnx.Rngs(default=0))
-    tx = optax.adam(learning_rate=0.01)
+    tx = optax.adam(learning_rate=0.001)
     optimizer = nnx.Optimizer(m, tx, wrt=nnx.Param)
 
     try:
-        for e in range(1000):
+        for e in range(100):
             print(f"epoch", e)
-            it = Dataloader(batch_size=16, block_size=128)()
+            it = Dataloader(batch_size=16, block_size=config.block_size)()
             for x, y in it:
                 loss = step_fn(model=m, optimizer=optimizer, x=x, y=y)
-                print(loss)
+            print(loss)
     except KeyboardInterrupt:
         print("Done.")
 
