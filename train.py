@@ -5,6 +5,7 @@ import optax
 from transformers import AutoTokenizer
 
 from tiny_moe import Tiny_MoE, Config
+from generate import generate
 from dataloader import Dataloader
 
 
@@ -27,7 +28,7 @@ def train():
     optimizer = nnx.Optimizer(m, tx, wrt=nnx.Param)
 
     try:
-        for e in range(100):
+        for e in range(10):
             print(f"epoch", e)
             it = Dataloader(batch_size=16, block_size=config.block_size)()
             for x, y in it:
@@ -35,6 +36,12 @@ def train():
             print(loss)
     except KeyboardInterrupt:
         print("Done.")
+    finally:
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
+        x = tokenizer.encode("A wise king")
+        x = generate(m, x, 21, key=jax.random.key(1337))
+        for i in range(x.shape[0]):
+            print(tokenizer.decode(x[i]))
 
 
 if __name__ == "__main__":

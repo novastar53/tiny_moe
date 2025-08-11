@@ -22,6 +22,7 @@ def _generate_step(m, x, key):
     )
     return sample_idxs
 
+
 def generate(m, x, max_length, key):
     x = jnp.array(x)[None, ...]
     x = jnp.tile(x, (8, 1))
@@ -29,7 +30,6 @@ def generate(m, x, max_length, key):
         sample_idxs = _generate_step(m, x, key)
         x = jnp.concatenate([x, sample_idxs], axis=-1)
     return x
-
 
 
 if __name__ == "__main__":
