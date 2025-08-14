@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from jax.sharding import PartitionSpec
 
 @dataclass
 class Config:
@@ -12,4 +13,5 @@ class Config:
     n_experts: int = 8
     expert_load_factor: int = 2
     expert_top_k: int = 2
+    expert_partition_spec: PartitionSpec = PartitionSpec("devices",)
 
