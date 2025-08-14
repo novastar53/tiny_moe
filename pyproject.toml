@@ -9,3 +9,8 @@ dependencies = [
     "jax>=0.7.0",
     "transformers>=4.55.0",
 ]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+]

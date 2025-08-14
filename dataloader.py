@@ -14,9 +14,8 @@ class Dataloader:
             text = f.read()
             tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
             self.tokens = tokenizer.encode(text)
-        
-        print(f"Initialized dataloader with {len(self.tokens)} tokens")
 
+        print(f"Initialized dataloader with {len(self.tokens)} tokens")
 
     def __call__(self):
         tokens = self.tokens
@@ -33,16 +32,17 @@ class Dataloader:
                 start_idx = (i * B + j) * T
                 end_idx = start_idx + T
                 x_seq = tokens[start_idx:end_idx]
-                y_seq = tokens[start_idx + 1:end_idx + 1]
+                y_seq = tokens[start_idx + 1 : end_idx + 1]
                 x.append(x_seq)
                 y.append(y_seq)
             x = np.array(x)
             y = np.array(y)
             yield x, y
 
+
 if __name__ == "__main__":
     dl = Dataloader(32, 128)
     it = dl()
     for x, y in it:
         print(x.shape, y.shape)
-        assert(x.shape == (32, 128))
+        assert x.shape == (32, 128)

@@ -22,7 +22,6 @@ class Tiny_MoE(nnx.Module):
         for _ in range(config.n_layer):
             self.layers.append(Attention(config, rngs))
             self.layers.append(GLU(config, rngs))
-    
 
     def __call__(self, x):
         x = self.embedding(x)
@@ -30,7 +29,6 @@ class Tiny_MoE(nnx.Module):
             x = x + self.layers[i](x)
         x = self.embedding.attend(x)
         return x
-
 
 
 if __name__ == "__main__":
@@ -42,4 +40,4 @@ if __name__ == "__main__":
     rngs = nnx.Rngs(default=1)
     m = Tiny_MoE(config, rngs)
     y = m(x)
-    assert(y.shape == (B, config.block_size, config.vocab_size))
+    assert y.shape == (B, config.block_size, config.vocab_size)

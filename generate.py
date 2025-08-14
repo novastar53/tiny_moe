@@ -13,13 +13,9 @@ def _generate_step(m, x, key):
     x_new = logits[:, -1, :]
     top_k_vals, top_k_indices = jax.lax.top_k(x_new, 50)
     key, subkey = jax.random.split(key)
-    top_k_logit_idxs = jax.random.categorical(
-        subkey, top_k_vals
-    )
+    top_k_logit_idxs = jax.random.categorical(subkey, top_k_vals)
     top_k_logit_idxs = top_k_logit_idxs[..., None]  # expand dims
-    sample_idxs = jnp.take_along_axis(
-        top_k_indices, top_k_logit_idxs, axis=-1
-    )
+    sample_idxs = jnp.take_along_axis(top_k_indices, top_k_logit_idxs, axis=-1)
     return sample_idxs
 
 

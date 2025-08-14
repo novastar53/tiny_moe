@@ -14,6 +14,7 @@ def loss_fn(model, state, x, y):
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, y)
     return loss.mean()
 
+
 @nnx.jit
 def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
     loss, grads = nnx.value_and_grad(loss_fn)(model, optimizer, x, y)
