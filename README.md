@@ -1,2 +1,8 @@
 # Tiny MoE
-The tiniest mixture-of-experts language model.
+
+<file name=0 path=/Users/vikram/dev/tiny_moe/README.md>
+<img src="assets/0_3.png" style="width: 50%; height: auto;" />
+</file>
+
+## The tiniest mixture-of-experts language model.
+
