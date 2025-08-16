@@ -53,7 +53,7 @@ class MoE(nnx.Module):
         h = jnp.einsum('enc,ech->enh', x, self.w_fc) + self.b_fc
         h = nnx.silu(g) * h
         o = jnp.einsum('enh,ehc->enc', h, self.w_proj) + self.b_proj
-        o = jax.lax.with_sharding_constraint(o, config.expert_partition_spec)
+        o = jax.lax.with_sharding_constraint(o, self.config.expert_partition_spec)
         return o
 
 
