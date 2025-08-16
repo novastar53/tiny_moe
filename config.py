@@ -6,7 +6,7 @@ from jax.sharding import PartitionSpec
 @dataclass
 class Config:
     vocab_size: int = 49152
-    block_size: int = 128
+    block_size: int = 12
     n_layer: int = 8
     n_embed: int = 64
     n_hidden: int = 64 * 3
