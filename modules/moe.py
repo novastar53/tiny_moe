@@ -141,4 +141,5 @@ if __name__ == "__main__":
         sharded_state = nnx.with_sharding_constraint(state, pspecs)
         nnx.update(moe, sharded_state)
         print(moe.w_fc.device)
-        moe(x)
+        x = moe(x)
+        print(x.device)
