@@ -15,10 +15,6 @@ class MoE(nnx.Module):
             sharding=self.config.expert_partition_spec,
         )
 
-        b_init = nnx.with_partitioning(
-            nnx.initializers.zeros, sharding=self.config.expert_partition_spec
-        )
-
         w_proj_init = nnx.with_partitioning(
             nnx.initializers.normal(stddev=0.02 * (2 * config.n_layer) ** -0.5),
             sharding=self.config.expert_partition_spec,
@@ -29,34 +25,30 @@ class MoE(nnx.Module):
                 rngs.default(), (config.n_experts, config.n_embed, config.n_hidden)
             )
         )
-        self.b_fc = nnx.Param(
-            b_init(rngs.default(), (config.n_experts, 1, config.n_hidden))
-        )
         self.w_gate = nnx.Param(
             w_fc_init(
                 rngs.default(), (config.n_experts, config.n_embed, config.n_hidden)
             )
-        )
-        self.b_gate = nnx.Param(
-            b_init(rngs.default(), (config.n_experts, 1, config.n_hidden))
         )
         self.w_proj = nnx.Param(
             w_proj_init(
                 rngs.default(), (config.n_experts, config.n_hidden, config.n_embed)
             )
         )
-        self.b_proj = nnx.Param(
-            b_init(rngs.default(), (config.n_experts, 1, config.n_embed))
-        )
-        self.router_gate = nnx.Linear(config.n_embed, config.n_experts, rngs=rngs)
+        self.router_gate = nnx.Linear(config.n_embed, config.n_experts, 
+                                      kernel_init=nnx.initializers.normal(stddev=0.02),
+                                      use_bias=False, 
+                                      rngs=rngs)
+
 
     def _apply_experts(self, x):
-        g = jnp.einsum("enc,ech->enh", x, self.w_gate) + self.b_gate
-        h = jnp.einsum("enc,ech->enh", x, self.w_fc) + self.b_fc
+        g = jnp.einsum("enc,ech->enh", x, self.w_gate)
+        h = jnp.einsum("enc,ech->enh", x, self.w_fc)
         h = nnx.silu(g) * h
-        o = jnp.einsum("enh,ehc->enc", h, self.w_proj) + self.b_proj
+        o = jnp.einsum("enh,ehc->enc", h, self.w_proj)
         o = jax.lax.with_sharding_constraint(o, self.config.expert_partition_spec)
         return o
+
 
     def assign_per_batch_experts(self, x, gate_probs, expert_cap):
         _, C = x.shape
@@ -143,9 +135,14 @@ class MoE(nnx.Module):
             ) / (2 * B * T)
             frac_router_probs = jnp.sum(gate_probs, axis=(0, 1)) / (B * T)
             aux_loss = jnp.sum(frac_tokens * frac_router_probs) * self.config.n_experts
-            return y_pred, aux_loss
+            return {
+                "output": y_pred, 
+                "aux_loss": aux_loss
+            }
 
-        return y_pred
+        return {
+            "output": y_pred
+        }
 
 
 if __name__ == "__main__":

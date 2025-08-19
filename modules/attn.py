@@ -8,13 +8,19 @@ from .rope import apply_rope
 class Attention(nnx.Module):
     def __init__(self, config, rope_omega: nnx.Variable, rngs: nnx.Rngs):
         self.config = config
-        self.q = nnx.Linear(config.n_embed, config.n_embed, rngs=rngs)
+        self.q = nnx.Linear(config.n_embed, config.n_embed, 
+                            kernel_init=nnx.initializers.normal(stddev=0.02),
+                            use_bias=False,
+                            rngs=rngs)
         self.kv = nnx.Linear(
             config.n_embed,
             2 * config.n_kv_head * config.n_embed // config.n_head,
+            kernel_init=nnx.initializers.normal(stddev=0.02),
+            use_bias=False,
             rngs=rngs,
         )
         self.rope_omega = rope_omega
+
 
     def __call__(self, x):
         B, T, C = x.shape
@@ -68,7 +74,10 @@ class Attention(nnx.Module):
             y = y.reshape(B, T, n_head, hs)  # (B, T, n_head, hs)
 
         y = jnp.reshape(y, (B, T, C))
-        return y
+
+        return {
+            "output": y,
+        }
 
 
 if __name__ == "__main__":

@@ -20,33 +20,96 @@ from modules.rope import calc_rope_omega_llama
 from config import Config
 
 
+class GLU_Block(nnx.Module):
+    def __init__(self, config: Config, rngs: nnx.Rngs):
+        self.config = config
+        self.rms_n_1 = nnx.RMSNorm(
+            config.n_embed,
+            scale_init=nnx.initializers.ones,
+            rngs=rngs
+        )
+        self.rms_n_2 = nnx.RMSNorm(
+            config.n_embed,
+            scale_init=nnx.initializers.ones,
+            rngs=rngs
+        )
+        rope_omega = calc_rope_omega_llama(
+            config.n_embed // config.n_head, config.block_size, config.rope_theta
+        )
+        self.attn = Attention(config, rope_omega, rngs)
+        self.glu = GLU(config, rngs)
+    
+
+    def __call__(self, x):
+        o = self.attn(self.rms_n_1(x))
+        x = o["output"] + x
+        o = self.glu(self.rms_n_2(x))
+        x = o["output"] + x
+        return {
+            "output": x
+        }
+
+
+class MOE_Block(nnx.Module):
+    def __init__(self, config: Config, rngs: nnx.Rngs):
+        self.config = config
+        self.rms_n_1 = nnx.RMSNorm(
+            config.n_embed,
+            scale_init=nnx.initializers.ones,
+            rngs=rngs
+        )
+        self.rms_n_2 = nnx.RMSNorm(
+            config.n_embed,
+            scale_init=nnx.initializers.ones,
+            rngs=rngs
+        )
+        rope_omega = calc_rope_omega_llama(
+            config.n_embed // config.n_head, config.block_size, config.rope_theta
+        )
+        self.attn = Attention(config, rope_omega, rngs)
+        self.moe = MoE(config, rngs)
+
+
+    def __call__(self, x):
+        attn_o = self.attn(self.rms_n_1(x))
+        x = x + attn_o["output"]
+        moe_o = self.moe(self.rms_n_2(x))
+        x = x + moe_o["output"]
+        o =  {
+            "output": x
+        }
+        if "aux_loss" in moe_o:
+            o["aux_loss"] = moe_o["aux_loss"]
+        return o
+
+
 class Tiny_MoE(nnx.Module):
     def __init__(self, config: Config, rngs: nnx.Rngs):
         self.config = config
         self.aux_loss = False
         self.embedding = nnx.Embed(config.vocab_size, config.n_embed, rngs=rngs)
-        self.layers = []
-        rope_omega = calc_rope_omega_llama(
-            config.n_embed // config.n_head, config.block_size, config.rope_theta
-        )
+        self.h = []
         for _ in range(config.n_layer // 2):
-            self.layers.append(Attention(config, rope_omega, rngs))
-            self.layers.append(GLU(config, rngs))
-            self.layers.append(Attention(config, rope_omega, rngs))
-            self.layers.append(MoE(config, rngs))
+            self.h += [
+                MOE_Block(config, rngs=rngs),
+                GLU_Block(config, rngs=rngs),
+            ]
+
 
     def __call__(self, x):
         x = self.embedding(x)
         total_aux_loss = 0
-        for i, layer in enumerate(self.layers):
-            if self.aux_loss is True and (i+1) % 4 == 0:
-                o, aux_loss = layer(x)
-                x = x + o
-                total_aux_loss += aux_loss
-            else:
-                x = x + layer(x)
+        for i, layer in enumerate(self.h):
+            o = layer(x)
+            x = x + o["output"]
+            if "aux_loss" in o:
+                total_aux_loss += o["aux_loss"]
         x = self.embedding.attend(x)
-        return x, total_aux_loss
+        return {
+            "output": x, 
+            "aux_loss": total_aux_loss
+        } 
+
 
     @staticmethod
     def from_checkpoint(
@@ -102,5 +165,5 @@ if __name__ == "__main__":
         pspecs = nnx.get_partition_spec(state)
         sharded_state = nnx.with_sharding_constraint(state, pspecs)
         nnx.update(m, sharded_state)
-        y = m(x)
+        y = m(x)["output"]
         assert y.shape == (B, config.block_size, config.vocab_size)

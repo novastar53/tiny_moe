@@ -19,9 +19,11 @@ from dataloader import Dataloader
 
 
 def loss_fn(model, x, y):
-    logits, aux_loss = model(x)
-    loss = optax.softmax_cross_entropy_with_integer_labels(logits, y) + 0.01 * aux_loss
-    return loss.mean()
+    output = model(x)
+    logits = output["output"]
+    aux_loss = output["aux_loss"]
+    loss = optax.softmax_cross_entropy_with_integer_labels(logits, y)
+    return loss.mean() + 0.01 * aux_loss
 
 
 @nnx.jit
