@@ -38,7 +38,7 @@ def train():
     sharding = jax.sharding.NamedSharding(mesh, config.expert_partition_spec)
     with mesh:
         m = Tiny_MoE(config, nnx.Rngs(default=0))
-        m.train(add_noise=True, aux_loss=False)
+        m.train(add_noise=True, aux_loss=True)
         state = nnx.state(m)
         pspecs = nnx.get_partition_spec(state)
         sharded_state = nnx.with_sharding_constraint(state, pspecs)
@@ -59,6 +59,7 @@ def train():
         finally:
             tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
             x = tokenizer.encode("A wise king")
+            m.eval(add_noise=False, aux_loss=False)
             x = generate(m, x, 21, key=jax.random.key(1337))
             for i in range(x.shape[0]):
                 print(tokenizer.decode(x[i]))
