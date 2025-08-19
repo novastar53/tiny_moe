@@ -34,7 +34,7 @@ class Attention(nnx.Module):
         implementation = self.config.sdpa_implementation
 
         if implementation in ("cudnn", "xla"):
-            x = jax.nn.dot_product_attention(
+            y = jax.nn.dot_product_attention(
                 q,
                 k,
                 v,
@@ -67,8 +67,8 @@ class Attention(nnx.Module):
             y = y.transpose((0, 3, 1, 2, 4))  # (B, T, n_kv_head, G, hs)
             y = y.reshape(B, T, n_head, hs)  # (B, T, n_head, hs)
 
-        x = jnp.reshape(x, (B, T, C))
-        return x
+        y = jnp.reshape(y, (B, T, C))
+        return y
 
 
 if __name__ == "__main__":
