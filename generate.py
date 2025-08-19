@@ -9,8 +9,9 @@ from tiny_moe import Tiny_MoE, Config
 
 @nnx.jit
 def _generate_step(m, x, key):
+    logits = m(x)
     if type(logits) == tuple:
-        logits, _ = m(x)
+        logits, _ = logits
     else:
         logits = m(x)
     x_new = logits[:, -1, :]

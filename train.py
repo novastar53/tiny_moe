@@ -32,7 +32,9 @@ def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
 
 
 def train():
-    config = Config()
+    config = Config(
+        sdpa_implementation="xla"
+    )
     sharding = jax.sharding.NamedSharding(mesh, config.expert_partition_spec)
     with mesh:
         m = Tiny_MoE(config, nnx.Rngs(default=0))
