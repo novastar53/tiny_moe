@@ -8,11 +8,7 @@ import flax.nnx as nnx
 
 def load_checkpoint(model, output_dir, config, run_dirname, step, rngs):
     checkpoint_path = (
-        output_dir
-        / config.name
-        / "checkpoints"
-        / run_dirname
-        / f"checkpoint-{step}.pt"
+        output_dir / config.name / "checkpoints" / run_dirname / f"checkpoint-{step}.pt"
     )
     m = model.from_checkpoint(checkpoint_path, rngs, config)
     return m
@@ -47,17 +43,16 @@ def load_checkpoint_from_gcloud(
 def count_params(m: nnx.Module, layer_type: str | None = None) -> int:
     def get_size(y):
         return y.size
-    
+
     if layer_type is not None:
+
         def _filter(path, val):
             return issubclass(val.type, nnx.Param) and layer_type in path
+
         _, params, _ = nnx.split(m, _filter, nnx.Variable)
     else:
         _, params, _ = nnx.split(m, nnx.Param, nnx.Variable)
     param_counts = jax.tree_util.tree_map(get_size, params)
-    total_params = jax.tree_util.tree_reduce(
-        lambda x, y: x + y, param_counts, 0
-    )
+    total_params = jax.tree_util.tree_reduce(lambda x, y: x + y, param_counts, 0)
 
     return total_params
-

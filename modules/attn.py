@@ -9,17 +9,18 @@ class Attention(nnx.Module):
     def __init__(self, config, rope_omega: nnx.Variable, rngs: nnx.Rngs):
         self.config = config
         self.q = nnx.Linear(config.n_embed, config.n_embed, rngs=rngs)
-        self.kv = nnx.Linear(config.n_embed, 
-                             2 * config.n_kv_head * config.n_embed // config.n_head, 
-                             rngs=rngs)
+        self.kv = nnx.Linear(
+            config.n_embed,
+            2 * config.n_kv_head * config.n_embed // config.n_head,
+            rngs=rngs,
+        )
         self.rope_omega = rope_omega
-
 
     def __call__(self, x):
         B, T, C = x.shape
         nH = self.config.n_head
         nKV = self.config.n_kv_head
-        q = self.q(x)  # B, T, 3 * C
+        q = self.q(x)
         kv = self.kv(x)
         k, v = jnp.split(kv, 2, axis=-1)
 
@@ -31,11 +32,15 @@ class Attention(nnx.Module):
         k = apply_rope(k, self.rope_omega)
 
         implementation = self.config.sdpa_implementation
-    
+
         if implementation in ("cudnn", "xla"):
             x = jax.nn.dot_product_attention(
-                q, k, v,
-                mask=None, bias=None, is_causal=True,
+                q,
+                k,
+                v,
+                mask=None,
+                bias=None,
+                is_causal=True,
                 implementation=implementation,
             )
         else:
@@ -44,24 +49,23 @@ class Attention(nnx.Module):
 
             G = n_head // n_kv_head
 
-            q = q.reshape((B, T, n_kv_head, G, hs)) # (B, T, n_kv_head, G, hs)
-            q = jnp.transpose(q, axes=(0, 2, 3, 1, 4))  
+            q = q.reshape((B, T, n_kv_head, G, hs))  # (B, T, n_kv_head, G, hs)
+            q = jnp.transpose(q, axes=(0, 2, 3, 1, 4))
 
-            k = k.reshape(-1, T, n_kv_head, 1, hs) # (B, T, n_kv_head, 1, hs)
-            k = jnp.transpose(k, axes=(0, 2, 3, 4, 1))  
+            k = k.reshape(-1, T, n_kv_head, 1, hs)  # (B, T, n_kv_head, 1, hs)
+            k = jnp.transpose(k, axes=(0, 2, 3, 4, 1))
 
-            v = v.reshape(-1, T, n_kv_head, 1, hs) # (B, T, n_kv_head, 1, hs)
-            v = jnp.transpose(v, axes=(0, 2, 3, 1, 4))  
+            v = v.reshape(-1, T, n_kv_head, 1, hs)  # (B, T, n_kv_head, 1, hs)
+            v = jnp.transpose(v, axes=(0, 2, 3, 1, 4))
 
-            att = (q @ k) / jnp.sqrt(hs) # (B, n_kv_head, G, T, T)
+            att = (q @ k) / jnp.sqrt(hs)  # (B, n_kv_head, G, T, T)
 
             mask = jnp.tril(jnp.ones((T, T), dtype=jnp.bool))[None, None, None, ...]
             att = jnp.where(mask == False, float("-inf"), att)
             att = jax.nn.softmax(att, axis=-1)
-            y = att @ v  
-            y = y.transpose((0, 3, 1, 2, 4)) # (B, T, n_kv_head, G, hs)
-            y = y.reshape(B, T, n_head, hs) # (B, T, n_head, hs)
-
+            y = att @ v
+            y = y.transpose((0, 3, 1, 2, 4))  # (B, T, n_kv_head, G, hs)
+            y = y.reshape(B, T, n_head, hs)  # (B, T, n_head, hs)
 
         x = jnp.reshape(x, (B, T, C))
         return x
@@ -79,8 +83,9 @@ if __name__ == "__main__":
     config = Config(n_embed=8, n_head=2)
     B, T = 16, config.n_embed
     rngs = nnx.Rngs(0)
-    rope_omega = calc_rope_omega_llama(config.n_embed // config.n_head, 
-                                       config.block_size, config.rope_theta)
+    rope_omega = calc_rope_omega_llama(
+        config.n_embed // config.n_head, config.block_size, config.rope_theta
+    )
     attn = Attention(config, rope_omega, rngs)
     x = jax.random.normal(jax.random.key(0), (B, T, config.n_embed))
     attn(x)

@@ -1,4 +1,5 @@
 import os
+
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
 import jax
@@ -17,15 +18,15 @@ from generate import generate
 from dataloader import Dataloader
 
 
-def loss_fn(model, state, x, y):
-    logits = model(x)
-    loss = optax.softmax_cross_entropy_with_integer_labels(logits, y)
+def loss_fn(model, x, y):
+    logits, aux_loss = model(x)
+    loss = optax.softmax_cross_entropy_with_integer_labels(logits, y) + 0.01 * aux_loss
     return loss.mean()
 
 
 @nnx.jit
 def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
-    loss, grads = nnx.value_and_grad(loss_fn)(model, optimizer, x, y)
+    loss, grads = nnx.value_and_grad(loss_fn)(model, x, y)
     optimizer.update(model, grads)
     return loss
 
@@ -35,6 +36,7 @@ def train():
     sharding = jax.sharding.NamedSharding(mesh, config.expert_partition_spec)
     with mesh:
         m = Tiny_MoE(config, nnx.Rngs(default=0))
+        m.train(add_noise=True, aux_loss=False)
         state = nnx.state(m)
         pspecs = nnx.get_partition_spec(state)
         sharded_state = nnx.with_sharding_constraint(state, pspecs)

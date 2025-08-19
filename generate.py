@@ -9,7 +9,10 @@ from tiny_moe import Tiny_MoE, Config
 
 @nnx.jit
 def _generate_step(m, x, key):
-    logits = m(x)
+    if type(logits) == tuple:
+        logits, _ = m(x)
+    else:
+        logits = m(x)
     x_new = logits[:, -1, :]
     top_k_vals, top_k_indices = jax.lax.top_k(x_new, 50)
     key, subkey = jax.random.split(key)
