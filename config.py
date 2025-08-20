@@ -9,7 +9,7 @@ from jax.sharding import PartitionSpec
 @dataclass
 class Config:
     name: str = "Tiny_MoE"
-    dtype: jnp.dtype = jnp.float32
+    dtype: jnp.dtype = jnp.bfloat16
     vocab_size: int = 50304
     block_size: int = 128
     n_layer: int = 4
