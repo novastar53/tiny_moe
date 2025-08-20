@@ -8,8 +8,8 @@ from tiny_moe import Tiny_MoE, Config
 
 
 @nnx.jit
-def _generate_step(m, x, key):
-    logits = m(x)["output"]
+def _generate_step(m, x, temp, key):
+    logits = m(x)["output"] / temp
     x_new = logits[:, -1, :]
     top_k_vals, top_k_indices = jax.lax.top_k(x_new, 50)
     key, subkey = jax.random.split(key)
@@ -19,11 +19,11 @@ def _generate_step(m, x, key):
     return sample_idxs
 
 
-def generate(m, x, max_length, key):
+def generate(m, x, max_length, temp, key):
     x = jnp.array(x)[None, ...]
     x = jnp.tile(x, (8, 1))
     while x.shape[-1] < max_length:
-        sample_idxs = _generate_step(m, x, key)
+        sample_idxs = _generate_step(m, x, temp, key)
         x = jnp.concatenate([x, sample_idxs], axis=-1)
     return x
 

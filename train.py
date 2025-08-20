@@ -6,6 +6,9 @@ import jax
 
 print(jax.devices())
 
+jax.config.update("jax_default_matmul_precision", "BF16_BF16_F32") # Set the default precision for matrix multiplication
+
+
 mesh = jax.sharding.Mesh(jax.devices(), ["devices"])
 
 import flax.nnx as nnx
@@ -37,14 +40,13 @@ def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
 
 def train():
     config = Config(
-        sdpa_implementation="xla"
+        sdpa_implementation="cudnn"
     )
     sharding = jax.sharding.NamedSharding(mesh, config.expert_partition_spec)
     with mesh:
         m = Tiny_MoE(config, nnx.Rngs(default=1337, gate_noise=42))
         num_params = count_params(m)
         print(f"Number of parameters: {num_params:,}")
-        nnx.display(nnx.state(m))
         m.train(add_noise=True, aux_loss=True)
         state = nnx.state(m)
         pspecs = nnx.get_partition_spec(state)
@@ -55,7 +57,7 @@ def train():
         optimizer = nnx.Optimizer(m, tx, wrt=nnx.Param)
 
         try:
-            for e in range(10):
+            for e in range(100):
                 print(f"epoch", e)
                 it = Dataloader(batch_size=16, block_size=config.block_size)()
                 for x, y in it:
@@ -66,9 +68,9 @@ def train():
         finally:
             #tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
             tokenizer = tiktoken.get_encoding("gpt2")
-            x = tokenizer.encode("A wise king")
+            x = tokenizer.encode("The forest lion and the bull")
             m.eval(add_noise=False, aux_loss=False)
-            x = generate(m, x, 21, key=jax.random.key(1337))
+            x = generate(m, x, 21, 0.1, jax.random.key(1337))
             for i in range(x.shape[0]):
                 print(tokenizer.decode(x[i]))
 
