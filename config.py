@@ -12,7 +12,7 @@ class Config:
     dtype: jnp.dtype = jnp.float32
     vocab_size: int = 50304
     block_size: int = 128
-    n_layer: int = 8
+    n_layer: int = 4
     n_embed: int = 576
     n_hidden: int = 1536
     n_head: int = 9

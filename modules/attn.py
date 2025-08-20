@@ -11,12 +11,14 @@ class Attention(nnx.Module):
         self.q = nnx.Linear(config.n_embed, config.n_embed, 
                             kernel_init=nnx.initializers.normal(stddev=0.02),
                             use_bias=False,
+                            dtype=config.dtype,
                             rngs=rngs)
         self.kv = nnx.Linear(
             config.n_embed,
             2 * config.n_kv_head * config.n_embed // config.n_head,
             kernel_init=nnx.initializers.normal(stddev=0.02),
             use_bias=False,
+            dtype=config.dtype,
             rngs=rngs,
         )
         self.proj = nnx.Linear(
@@ -24,6 +26,7 @@ class Attention(nnx.Module):
             config.n_embed,
             kernel_init=nnx.initializers.normal(stddev=0.02 * (2 * self.config.n_layer) ** -0.5),
             use_bias=False,
+            dtype=config.dtype,
             rngs=rngs
         )
         self.rope_omega = rope_omega

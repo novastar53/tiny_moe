@@ -26,11 +26,13 @@ class GLU_Block(nnx.Module):
         self.rms_n_1 = nnx.RMSNorm(
             config.n_embed,
             scale_init=nnx.initializers.ones,
+            dtype=config.dtype,
             rngs=rngs
         )
         self.rms_n_2 = nnx.RMSNorm(
             config.n_embed,
             scale_init=nnx.initializers.ones,
+            dtype=config.dtype,
             rngs=rngs
         )
         rope_omega = calc_rope_omega_llama(
@@ -56,11 +58,13 @@ class MOE_Block(nnx.Module):
         self.rms_n_1 = nnx.RMSNorm(
             config.n_embed,
             scale_init=nnx.initializers.ones,
+            dtype=config.dtype,
             rngs=rngs
         )
         self.rms_n_2 = nnx.RMSNorm(
             config.n_embed,
             scale_init=nnx.initializers.ones,
+            dtype=config.dtype,
             rngs=rngs
         )
         rope_omega = calc_rope_omega_llama(
@@ -89,8 +93,10 @@ class Tiny_MoE(nnx.Module):
         self.aux_loss = False
         self.embedding = nnx.Embed(config.vocab_size, config.n_embed,
                                    embedding_init=nnx.initializers.normal(stddev=0.02), 
+                                   dtype=config.dtype,
                                    rngs=rngs)
         self.rms_n_f = nnx.RMSNorm(config.n_embed,
+                                   dtype=config.dtype,
                                    scale_init=nnx.initializers.ones, rngs=rngs)
         self.h = []
         for _ in range(config.n_layer // 2):

@@ -8,14 +8,17 @@ class GLU(nnx.Module):
         self.fc = nnx.Linear(config.n_embed, config.n_hidden, 
                              kernel_init=nnx.initializers.normal(stddev=0.02), 
                              use_bias=False,
+                             dtype=config.dtype,
                              rngs=rngs)
         self.gate = nnx.Linear(config.n_embed, config.n_hidden, 
                                kernel_init=nnx.initializers.normal(stddev=0.02),
                                use_bias=False,
+                               dtype=config.dtype,
                                rngs=rngs)
         self.proj = nnx.Linear(config.n_hidden, config.n_embed, 
                                kernel_init=nnx.initializers.normal(stddev=0.02 * (2 * config.n_layer) ** -0.5),
                                use_bias=False,
+                               dtype=config.dtype,
                                rngs=rngs)
 
     def __call__(self, x):

@@ -1,4 +1,5 @@
 import jax
+from flax.nnx.nn import dtypes
 import jax.numpy as jnp
 import flax.nnx as nnx
 
@@ -22,7 +23,7 @@ class MoE(nnx.Module):
 
         self.w_fc = nnx.Param(
             w_fc_init(
-                rngs.default(), (config.n_experts, config.n_embed, config.n_hidden)
+                rngs.default(), (config.n_experts, config.n_embed, config.n_hidden), 
             )
         )
         self.w_gate = nnx.Param(
@@ -42,10 +43,12 @@ class MoE(nnx.Module):
 
 
     def _apply_experts(self, x):
-        g = jnp.einsum("enc,ech->enh", x, self.w_gate)
-        h = jnp.einsum("enc,ech->enh", x, self.w_fc)
+        (x, w_fc, w_gate, w_proj) = dtypes.promote_dtype(
+        (x, self.w_fc.value, self.w_gate.value, self.w_proj.value), dtype=self.config.dtype)
+        g = jnp.einsum("enc,ech->enh", x, w_gate)
+        h = jnp.einsum("enc,ech->enh", x, w_fc)
         h = nnx.silu(g) * h
-        o = jnp.einsum("enh,ehc->enc", h, self.w_proj)
+        o = jnp.einsum("enh,ehc->enc", h, w_proj)
         o = jax.lax.with_sharding_constraint(o, self.config.expert_partition_spec)
         return o
 
