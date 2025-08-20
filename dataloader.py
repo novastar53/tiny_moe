@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
+import tiktoken
 from transformers import AutoTokenizer
 
 
@@ -12,7 +13,8 @@ class Dataloader:
 
         with open(Path().absolute() / "datasets" / "panchatantra-ryder-clean.txt") as f:
             text = f.read()
-            tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
+            #tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
+            tokenizer = tiktoken.get_encoding("gpt2")
             self.tokens = tokenizer.encode(text)
 
         print(f"Initialized dataloader with {len(self.tokens)} tokens")

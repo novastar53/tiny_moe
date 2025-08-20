@@ -19,6 +19,13 @@ class Attention(nnx.Module):
             use_bias=False,
             rngs=rngs,
         )
+        self.proj = nnx.Linear(
+            config.n_embed,
+            config.n_embed,
+            kernel_init=nnx.initializers.normal(stddev=0.02 * (2 * self.config.n_layer) ** -0.5),
+            use_bias=False,
+            rngs=rngs
+        )
         self.rope_omega = rope_omega
 
 
@@ -74,9 +81,10 @@ class Attention(nnx.Module):
             y = y.reshape(B, T, n_head, hs)  # (B, T, n_head, hs)
 
         y = jnp.reshape(y, (B, T, C))
+        y = self.proj(y)
 
         return {
-            "output": y,
+            "output": y
         }
 
 

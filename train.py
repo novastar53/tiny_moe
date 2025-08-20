@@ -11,11 +11,13 @@ mesh = jax.sharding.Mesh(jax.devices(), ["devices"])
 import flax.nnx as nnx
 import optax
 
+import tiktoken
 from transformers import AutoTokenizer
 
 from tiny_moe import Tiny_MoE, Config
 from generate import generate
 from dataloader import Dataloader
+from utils import count_params
 
 
 def loss_fn(model, x, y):
@@ -39,7 +41,10 @@ def train():
     )
     sharding = jax.sharding.NamedSharding(mesh, config.expert_partition_spec)
     with mesh:
-        m = Tiny_MoE(config, nnx.Rngs(default=0))
+        m = Tiny_MoE(config, nnx.Rngs(default=1337, gate_noise=42))
+        num_params = count_params(m)
+        print(f"Number of parameters: {num_params:,}")
+        nnx.display(nnx.state(m))
         m.train(add_noise=True, aux_loss=True)
         state = nnx.state(m)
         pspecs = nnx.get_partition_spec(state)
@@ -59,7 +64,8 @@ def train():
         except KeyboardInterrupt:
             print("Done.")
         finally:
-            tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
+            #tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
+            tokenizer = tiktoken.get_encoding("gpt2")
             x = tokenizer.encode("A wise king")
             m.eval(add_noise=False, aux_loss=False)
             x = generate(m, x, 21, key=jax.random.key(1337))

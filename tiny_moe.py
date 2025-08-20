@@ -87,7 +87,11 @@ class Tiny_MoE(nnx.Module):
     def __init__(self, config: Config, rngs: nnx.Rngs):
         self.config = config
         self.aux_loss = False
-        self.embedding = nnx.Embed(config.vocab_size, config.n_embed, rngs=rngs)
+        self.embedding = nnx.Embed(config.vocab_size, config.n_embed,
+                                   embedding_init=nnx.initializers.normal(stddev=0.02), 
+                                   rngs=rngs)
+        self.rms_n_f = nnx.RMSNorm(config.n_embed,
+                                   scale_init=nnx.initializers.ones, rngs=rngs)
         self.h = []
         for _ in range(config.n_layer // 2):
             self.h += [
@@ -104,9 +108,10 @@ class Tiny_MoE(nnx.Module):
             x = x + o["output"]
             if "aux_loss" in o:
                 total_aux_loss += o["aux_loss"]
-        x = self.embedding.attend(x)
+        x = self.rms_n_f(x)
+        logits = self.embedding.attend(x)
         return {
-            "output": x, 
+            "output": logits, 
             "aux_loss": total_aux_loss
         } 
 
