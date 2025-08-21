@@ -13,7 +13,8 @@ class MoE(nnx.Module):
 
         self.router_gate = nnx.Linear(config.n_embed, config.n_experts, 
                                       kernel_init=nnx.initializers.normal(stddev=0.02),
-                                      use_bias=False, 
+                                      use_bias=False,
+                                      dtype=config.dtype, 
                                       rngs=rngs)
 
         w_fc_init = nnx.with_partitioning(
@@ -92,7 +93,7 @@ class MoE(nnx.Module):
         g = self.router_gate(x)
         if self.add_noise:
             noise = (
-                jax.random.normal(self.gate_noise_rngstream(), g.shape)
+                jax.random.normal(self.gate_noise_rngstream(), g.shape, dtype=self.config.dtype)
                 / self.config.n_experts
             )
             g += noise

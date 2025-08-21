@@ -44,9 +44,9 @@ class GLU_Block(nnx.Module):
 
     def __call__(self, x):
         o = self.attn(self.rms_n_1(x))
-        x = o["output"] + x
+        x = x + o["output"]
         o = self.glu(self.rms_n_2(x))
-        x = o["output"] + x
+        x = x + o["output"]
         return {
             "output": x
         }
@@ -110,9 +110,9 @@ class Tiny_MoE(nnx.Module):
     def __call__(self, x):
         x = self.embedding(x)
         total_aux_loss = 0
-        for i, layer in enumerate(self.h):
+        for layer in self.h:
             o = layer(x)
-            x = x + o["output"]
+            x = o['output'] 
             if "aux_loss" in o:
                 total_aux_loss += o["aux_loss"]
         x = self.rms_n_f(x)
