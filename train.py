@@ -28,7 +28,7 @@ def loss_fn(model, x, y):
     logits = output["output"]
     aux_loss = output["aux_loss"]
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, y)
-    return loss.mean() + 0.01 * aux_loss
+    return loss.mean() + model.config.aux_loss_coeff * aux_loss
 
 
 @nnx.jit
@@ -61,6 +61,8 @@ def train():
                 print(f"epoch", e)
                 it = Dataloader(batch_size=16, block_size=config.block_size)()
                 for x, y in it:
+                    x = jax.device_put(x, sharding)
+                    y = jax.device_put(y, sharding)
                     loss = step_fn(model=m, optimizer=optimizer, x=x, y=y)
                 print(loss)
         except KeyboardInterrupt:
