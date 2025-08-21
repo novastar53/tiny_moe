@@ -8,12 +8,12 @@ from .rope import apply_rope
 class Attention(nnx.Module):
     def __init__(self, config, rope_omega: nnx.Variable, rngs: nnx.Rngs):
         self.config = config
-        self.q = nnx.Linear(config.n_embed, config.n_embed, 
+        self.wq = nnx.Linear(config.n_embed, config.n_embed, 
                             kernel_init=nnx.initializers.normal(stddev=0.02),
                             use_bias=False,
                             dtype=config.dtype,
                             rngs=rngs)
-        self.kv = nnx.Linear(
+        self.wkv = nnx.Linear(
             config.n_embed,
             2 * config.n_kv_head * config.n_embed // config.n_head,
             kernel_init=nnx.initializers.normal(stddev=0.02),
@@ -21,7 +21,7 @@ class Attention(nnx.Module):
             dtype=config.dtype,
             rngs=rngs,
         )
-        self.proj = nnx.Linear(
+        self.wproj = nnx.Linear(
             config.n_embed,
             config.n_embed,
             kernel_init=nnx.initializers.normal(stddev=0.02 * (2 * self.config.n_layer) ** -0.5),
@@ -36,8 +36,8 @@ class Attention(nnx.Module):
         B, T, C = x.shape
         nH = self.config.n_head
         nKV = self.config.n_kv_head
-        q = self.q(x)
-        kv = self.kv(x)
+        q = self.wq(x)
+        kv = self.wkv(x)
         k, v = jnp.split(kv, 2, axis=-1)
 
         q = q.reshape(B, T, nH, C // nH)
@@ -84,7 +84,7 @@ class Attention(nnx.Module):
             y = y.reshape(B, T, n_head, hs)  # (B, T, n_head, hs)
 
         y = jnp.reshape(y, (B, T, C))
-        y = self.proj(y)
+        y = self.wproj(y)
 
         return {
             "output": y

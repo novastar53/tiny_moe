@@ -95,9 +95,6 @@ class Tiny_MoE(nnx.Module):
                                    embedding_init=nnx.initializers.normal(stddev=0.02), 
                                    dtype=config.dtype,
                                    rngs=rngs)
-        self.rms_n_f = nnx.RMSNorm(config.n_embed,
-                                   dtype=config.dtype,
-                                   scale_init=nnx.initializers.ones, rngs=rngs)
         self.h = []
         for _ in range(config.n_layer // 2):
             self.h += [
@@ -105,6 +102,10 @@ class Tiny_MoE(nnx.Module):
                 GLU_Block(config, rngs=rngs),
             ]
 
+        self.rms_n_f = nnx.RMSNorm(config.n_embed,
+                                   dtype=config.dtype,
+                                   scale_init=nnx.initializers.ones, rngs=rngs)
+ 
 
     def __call__(self, x):
         x = self.embedding(x)

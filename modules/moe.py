@@ -11,6 +11,11 @@ class MoE(nnx.Module):
         self.aux_loss = False
         self.gate_noise_rngstream = rngs.gate_noise
 
+        self.router_gate = nnx.Linear(config.n_embed, config.n_experts, 
+                                      kernel_init=nnx.initializers.normal(stddev=0.02),
+                                      use_bias=False, 
+                                      rngs=rngs)
+
         w_fc_init = nnx.with_partitioning(
             nnx.initializers.normal(stddev=0.02),
             sharding=self.config.expert_partition_spec,
@@ -36,11 +41,6 @@ class MoE(nnx.Module):
                 rngs.default(), (config.n_experts, config.n_hidden, config.n_embed)
             )
         )
-        self.router_gate = nnx.Linear(config.n_embed, config.n_experts, 
-                                      kernel_init=nnx.initializers.normal(stddev=0.02),
-                                      use_bias=False, 
-                                      rngs=rngs)
-
 
     def _apply_experts(self, x):
         (x, w_fc, w_gate, w_proj) = dtypes.promote_dtype(

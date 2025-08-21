@@ -1,6 +1,6 @@
 import os
 
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
+#os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
 import jax
 
@@ -31,7 +31,7 @@ def loss_fn(model, x, y):
     return loss.mean() + model.config.aux_loss_coeff * aux_loss
 
 
-@nnx.jit
+#@nnx.jit
 def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
     loss, grads = nnx.value_and_grad(loss_fn)(model, x, y)
     optimizer.update(model, grads)
@@ -40,18 +40,19 @@ def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
 
 def train():
     config = Config(
-        sdpa_implementation="cudnn"
+        sdpa_implementation="xla"
     )
     sharding = jax.sharding.NamedSharding(mesh, config.expert_partition_spec)
     with mesh:
-        m = Tiny_MoE(config, nnx.Rngs(default=1337, gate_noise=42))
+        rngs = nnx.Rngs(default=1337, gate_noise=42)
+        m = Tiny_MoE(config, rngs)
         num_params = count_params(m)
         print(f"Number of parameters: {num_params:,}")
         m.train(add_noise=True, aux_loss=True)
-        state = nnx.state(m)
-        pspecs = nnx.get_partition_spec(state)
-        sharded_state = nnx.with_sharding_constraint(state, pspecs)
-        nnx.update(m, sharded_state)
+        #state = nnx.state(m)
+        #pspecs = nnx.get_partition_spec(state)
+        #sharded_state = nnx.with_sharding_constraint(state, pspecs)
+        #nnx.update(m, sharded_state)
 
         tx = optax.adam(learning_rate=0.001)
         optimizer = nnx.Optimizer(m, tx, wrt=nnx.Param)
@@ -61,8 +62,8 @@ def train():
                 print(f"epoch", e)
                 it = Dataloader(batch_size=16, block_size=config.block_size)()
                 for x, y in it:
-                    x = jax.device_put(x, sharding)
-                    y = jax.device_put(y, sharding)
+                    #x = jax.device_put(x, sharding)
+                    #y = jax.device_put(y, sharding)
                     loss = step_fn(model=m, optimizer=optimizer, x=x, y=y)
                 print(loss)
         except KeyboardInterrupt:
