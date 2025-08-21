@@ -36,7 +36,7 @@ class GLU_Block(nnx.Module):
             rngs=rngs
         )
         rope_omega = calc_rope_omega_llama(
-            config.n_embed // config.n_head, config.block_size, config.rope_theta
+            config.n_embed // config.n_head, config.block_size, config.rope_theta, config.dtype
         )
         self.attn = Attention(config, rope_omega, rngs)
         self.glu = GLU(config, rngs)
@@ -68,7 +68,7 @@ class MOE_Block(nnx.Module):
             rngs=rngs
         )
         rope_omega = calc_rope_omega_llama(
-            config.n_embed // config.n_head, config.block_size, config.rope_theta
+            config.n_embed // config.n_head, config.block_size, config.rope_theta, config.dtype
         )
         self.attn = Attention(config, rope_omega, rngs)
         self.moe = MoE(config, rngs)
