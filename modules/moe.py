@@ -29,17 +29,17 @@ class MoE(nnx.Module):
 
         self.w_fc = nnx.Param(
             w_fc_init(
-                rngs.default(), (config.n_experts, config.n_embed, config.n_hidden), 
+                rngs.default(), (config.n_experts, config.n_embed, config.n_glu_hidden), 
             )
         )
         self.w_gate = nnx.Param(
             w_fc_init(
-                rngs.default(), (config.n_experts, config.n_embed, config.n_hidden)
+                rngs.default(), (config.n_experts, config.n_embed, config.n_glu_hidden)
             )
         )
         self.w_proj = nnx.Param(
             w_proj_init(
-                rngs.default(), (config.n_experts, config.n_hidden, config.n_embed)
+                rngs.default(), (config.n_experts, config.n_glu_hidden, config.n_embed)
             )
         )
 

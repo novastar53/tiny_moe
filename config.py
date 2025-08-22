@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from jax.sharding import PartitionSpec
 
 
-@dataclass
+@dataclass(eq=True, unsafe_hash=True)
 class Config:
     name: str = "Tiny_MoE"
     dtype: jnp.dtype = jnp.bfloat16
@@ -14,7 +14,7 @@ class Config:
     block_size: int = 128
     n_layer: int = 4
     n_embed: int = 576
-    n_hidden: int = 1536
+    n_glu_hidden: int = 1536
     n_head: int = 9
     n_kv_head: int = 3
     n_experts: int = 8
