@@ -39,7 +39,7 @@ from utils import (
 )
 
 # set up logging 
-output_dir = Path("training_runs").absolute()
+output_dir = Path("/workspace/training_runs").absolute()
 timestamp = datetime.now().strftime("%Y%m%d")
 random_code = generate_readable_code()
 run_name = f"run_{timestamp}_{random_code}"
@@ -90,7 +90,7 @@ config = Config(
             name="Tiny_MoE",
             dtype=jnp.bfloat16, \
             vocab_size=49152,
-            n_layer=4,
+            n_layer=30,
             block_size=2048,
             n_head=9,
             n_kv_head=3,
@@ -115,10 +115,10 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 
 @dataclass
 class TrainerConfig:
-  num_tokens: int =  int(1e6) #int(228e9)
-  num_tokens_per_batch: int = 2**11 # 2**19, 0.5 million as per the GPT 3.5 paper
-  mB: int = 2 * num_devices
-  T: int = 128
+  num_tokens: int =  int(228e9)
+  num_tokens_per_batch: int = 2**19 # 2**19, 0.5 million as per the GPT 3.5 paper
+  mB: int = 32 * num_devices
+  T: int = 2048
   max_steps: int = int(num_tokens // num_tokens_per_batch)
   max_lr: float = 6e-4
   min_lr: float = max_lr * 0.1
