@@ -158,8 +158,6 @@ if __name__ == "__main__":
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     from config import Config
 
-    print(jax.devices())
-
     config = Config()
     B, T = 16, config.block_size
     rngs = nnx.Rngs(default=0, gate_noise=1)
@@ -169,13 +167,10 @@ if __name__ == "__main__":
     sharding = jax.sharding.NamedSharding(mesh, config.expert_partition_spec)
     with mesh:
         x = nnx.with_sharding_constraint(x, sharding)
-        print(x.device)
         moe = MoE(config, rngs)
         moe.add_noise = True
         state = nnx.state(moe)
         pspecs = nnx.get_partition_spec(state)
         sharded_state = nnx.with_sharding_constraint(state, pspecs)
         nnx.update(moe, sharded_state)
-        print(moe.w_fc.device)
         x = moe(x)
-        print(x.device)

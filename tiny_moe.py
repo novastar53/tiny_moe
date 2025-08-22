@@ -123,44 +123,10 @@ class Tiny_MoE(nnx.Module):
         } 
 
 
-    @staticmethod
-    def from_checkpoint(
-        fpath: str,
-        rngs: nnx.Rngs,
-        config: Optional[Config] = None,
-        sharding: Optional[jax.sharding.NamedSharding] = None,
-    ):
-
-        default = jax.random.key(1337)
-        gate_noise = jax.random.key(42)
-        rngs = nnx.Rngs(default=default, gate_noise=gate_noise)
-        config = config if config else Config()
-        abstract_model = nnx.eval_shape(
-            lambda: Tiny_MoE(
-                config=config, rngs=nnx.Rngs(default=default, gate_noise=gate_noise)
-            )
-        )
-        graphdef, rngstate, other_state = nnx.split(abstract_model, nnx.RngState, ...)
-        # pspecs = nnx.get_partition_spec(other_state)
-        # sharded_state = nnx.with_sharding_constraint(other_state, pspecs)
-        checkpointer = ocp.StandardCheckpointer()
-        other_state = checkpointer.restore(fpath, target=other_state)
-        model = nnx.merge(graphdef, rngstate, other_state)
-        for i in range(len(model.layers)):
-            if hasattr(model.layers[i], "moe"):
-                # model.h[i].moe.gate_noise_rngstream = rngs["gate_noise"].fork()
-                model.layers[i].moe.gate_noise_rngstream = (
-                    rngs.gate_noise
-                )  # TODO: Temporary fix for backward compatibility with jax 0.5.2
-        return model
-
-
 if __name__ == "__main__":
     import os
 
     os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
-
-    print(jax.devices())
 
     config = Config()
     mesh = jax.sharding.Mesh(jax.devices(), ["devices"])

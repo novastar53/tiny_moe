@@ -8,6 +8,10 @@ import numpy as np
 import tiktoken
 from transformers import AutoTokenizer
 
+from logging_config import setup_logging
+
+logger = setup_logging()
+
 
 class Dataloader:
     def __init__(self, batch_size, block_size):
@@ -20,7 +24,7 @@ class Dataloader:
             tokenizer = tiktoken.get_encoding("gpt2")
             self.tokens = tokenizer.encode(text)
 
-        print(f"Initialized dataloader with {len(self.tokens)} tokens")
+        logger.info(f"Initialized dataloader with {len(self.tokens)} tokens")
 
     def __call__(self):
         tokens = self.tokens
@@ -49,7 +53,7 @@ if __name__ == "__main__":
     dl = Dataloader(32, 128)
     it = dl()
     for x, y in it:
-        print(x.shape, y.shape)
+        logger.info(f"Batch shapes - x: {x.shape}, y: {y.shape}")
         assert x.shape == (32, 128)
 
 
@@ -85,7 +89,7 @@ class BaseDataLoader(ABC):
         self.shard_size = len(self.shard)
 
         if not quiet:
-            print(f"""{self.__class__.__name__} initialized:
+            logger.info(f"""{self.__class__.__name__} initialized:
 ------------------------
 label:          {label}
 shards:         {len(self.shards):,}
@@ -219,7 +223,7 @@ class BlendedCloudDataLoader():
         self.T = block_size
         self.D = device_rank
         batch_sizes = self._calc_batch_sizes(batch_size, proportions)
-        print(f"Initializing blended dataset with batch sizes: {batch_sizes}")
+        logger.info(f"Initializing blended dataset with batch sizes: {batch_sizes}")
         self.dataloaders = []
         n = len(bucket_names)
         # Default to zeros if not provided

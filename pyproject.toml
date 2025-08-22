@@ -8,6 +8,7 @@ dependencies = [
     "english-words>=2.0.2",
     "flax>=0.11.1",
     "google-cloud-storage>=3.3.0",
+    "matplotlib>=3.10.5",
     "orbax>=0.1.9",
     "tiktoken>=0.11.0",
     "transformers>=4.55.0",
