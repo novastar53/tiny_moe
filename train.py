@@ -115,9 +115,9 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 
 @dataclass
 class TrainerConfig:
-  num_tokens: int =  100000 #int(228e9)
-  num_tokens_per_batch: int = 2**15 # 2**19, 0.5 million as per the GPT 3.5 paper
-  mB: int = 32 * num_devices
+  num_tokens: int =  int(1e6) #int(228e9)
+  num_tokens_per_batch: int = 2**11 # 2**19, 0.5 million as per the GPT 3.5 paper
+  mB: int = 2 * num_devices
   T: int = 128
   max_steps: int = int(num_tokens // num_tokens_per_batch)
   max_lr: float = 6e-4
