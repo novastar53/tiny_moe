@@ -65,9 +65,9 @@ def _from_checkpoint(
     return model
 
 
-def load_checkpoint(model, output_dir, config, run_dirname, step, rngs):
+def load_checkpoint(output_dir, config, run_dirname, step, rngs):
     checkpoint_path = (
-        output_dir / config.name / "checkpoints" / run_dirname / f"checkpoint-{step}.pt"
+        output_dir / config.name / "model_checkpoints" / run_dirname / f"checkpoint-{step}.pt"
     )
     m = _from_checkpoint(checkpoint_path, rngs, config)
     return m
@@ -80,7 +80,7 @@ def load_checkpoint_from_gcloud(
         return load_checkpoint(model, output_dir, config, run_dirname, step, rngs)
     except:
         client = storage.Client()
-        prefix = f"{config.name}/checkpoints/{run_dirname}/checkpoint-{step}.pt/"
+        prefix = f"{config.name}/model_checkpoints/{run_dirname}/checkpoint-{step}.pt/"
         checkpoint_path = (
             output_dir
             / config.name

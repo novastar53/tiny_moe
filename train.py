@@ -5,7 +5,7 @@
 
 import os
 
-#os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./alpha-448101-282bc1b884cd.json"
 
 import time
@@ -116,7 +116,7 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
   num_tokens: int =  100000 #int(228e9)
-  num_tokens_per_batch: int = 2**12 # 2**19, 0.5 million as per the GPT 3.5 paper
+  num_tokens_per_batch: int = 2**15 # 2**19, 0.5 million as per the GPT 3.5 paper
   mB: int = 32 * num_devices
   T: int = 128
   max_steps: int = int(num_tokens // num_tokens_per_batch)
@@ -189,7 +189,6 @@ train_dl = BlendedCloudDataLoader(
     "smollm-corpus/processed/python-edu",
     "smollm-corpus/processed/cosmopedia-v2"],
     proportions=[85, 1, 12],
-    start_shards=[545, 7, 76],
     label="train"
 )
 jax.config.update("jax_default_matmul_precision", "BF16_BF16_F32") 
