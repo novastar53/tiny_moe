@@ -108,10 +108,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 This implementation draws inspiration from and builds upon the work of several key projects:
 
 - [Andrej Karpathy's nanoGPT](https://github.com/karpathy/nanoGPT)
-- [Google DeepMind VMOE](https://github.com/google-deepmind/vmoe)
-- [Meta LLaMA](https://github.com/facebookresearch/llama)
-- [Hugginface SmolLM](https://huggingface.co/blogs/smollm)
+- [Huggingface SmolLM](https://huggingface.co/blogs/smollm)
 - [Meta Mobile LLM](https://github.com/facebookresearch/mobile-llm)
+- [Meta LLaMA](https://github.com/facebookresearch/llama)
+- [Google DeepMind VMOE](https://github.com/google-deepmind/vmoe)
 
 Additional acknowledgments:
 - The JAX and Flax community for their excellent tools and support
