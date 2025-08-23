@@ -5,7 +5,7 @@
 
 import os
 
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
+#os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./alpha-448101-282bc1b884cd.json"
 
 import time
@@ -91,7 +91,7 @@ config = Config(
             name="Tiny_MoE",
             dtype=jnp.bfloat16, \
             vocab_size=49152,
-            n_layer=2,
+            n_layer=30,
             block_size=2048,
             n_head=9,
             n_kv_head=3,
@@ -116,9 +116,9 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
   num_tokens: int =  int(228e9)
-  num_tokens_per_batch: int = 2**11 # 2**19, 0.5 million as per the GPT 3.5 paper
-  mB: int = 2 * num_devices
-  T: int = 128
+  num_tokens_per_batch: int = 2**19 # 2**19, 0.5 million as per the GPT 3.5 paper
+  mB: int = 32 * num_devices
+  T: int = 2048
   max_steps: int = int(num_tokens // num_tokens_per_batch)
   max_lr: float = 6e-4
   min_lr: float = max_lr * 0.1
@@ -134,7 +134,6 @@ class TrainerConfig:
 
 trconf = TrainerConfig()
 
-assert(trconf.grad_accumulation_steps == 1)
 
 # Set up optimizer
 
@@ -177,7 +176,7 @@ train_logger.info(f"Weight decay param count: {weight_decay_param_count:,}")
 train_logger.info(f"Training config:\n{pformat(trconf)}")
 train_logger.info(f"Effective batch size: {trconf.grad_accumulation_steps * trconf.mB}")
 train_logger.info(f"Effective batch size per device: {trconf.grad_accumulation_steps * trconf.mB // num_devices}")
-
+assert(trconf.grad_accumulation_steps == 1)
 
 # Set up Dataloader
 
