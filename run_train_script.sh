@@ -1,0 +1,1 @@
+nohup uv run train.py > output.log 2>&1 &
