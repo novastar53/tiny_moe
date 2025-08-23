@@ -1,6 +1,6 @@
 # Tiny MoE
 
-<img src="assets/0_1.png" style="width: 50%; height: auto;" />
+<img src="assets/tiny_moe.png" style="width: 50%; height: auto;" />
 
 ## Overview
 
