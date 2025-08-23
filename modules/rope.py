@@ -1,5 +1,5 @@
+import jax
 import jax.numpy as jnp
-import flax.nnx as nnx
 
 
 def calc_rope_omega_llama(
@@ -7,14 +7,14 @@ def calc_rope_omega_llama(
     block_size: int,
     rope_base_freq: float,
     dtype: jnp.dtype = jnp.float32,
-) -> nnx.Variable:
+) -> jax.Array:
     pow = jnp.arange(0, n_dim, 2, dtype=dtype)
     omega = rope_base_freq ** (pow / n_dim)
     omega = jnp.concat([omega, omega], axis=0)
     pos = jnp.arange(0, block_size, dtype=dtype)
     pos = jnp.expand_dims(pos, axis=1)
     omega = omega * pos
-    return nnx.Variable(omega)
+    return omega
 
 
 def rotate_half(x):

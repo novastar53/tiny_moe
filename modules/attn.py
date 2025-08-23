@@ -2,11 +2,11 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 
-from .rope import apply_rope
+from .rope import calc_rope_omega_llama, apply_rope
 
 
 class Attention(nnx.Module):
-    def __init__(self, config, rope_omega: nnx.Variable, rngs: nnx.Rngs):
+    def __init__(self, config, rngs: nnx.Rngs):
         self.config = config
         self.wq = nnx.Linear(
             config.n_embed,
@@ -38,7 +38,11 @@ class Attention(nnx.Module):
             dtype=config.dtype,
             rngs=rngs,
         )
-        self.rope_omega = rope_omega
+        self.rope_omega = nnx.Variable(
+            calc_rope_omega_llama(
+                config.n_embed // config.n_head, config.block_size, config.rope_theta, config.dtype
+            ),
+        )
 
 
     def __call__(self, x):

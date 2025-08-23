@@ -103,7 +103,6 @@ train_logger.info(f"Model config:\n{pformat(config)}")
 
 mesh = jax.sharding.Mesh(jax.devices(), ["devices"])
 m = create_sharded_model(config, mesh, rngs)
-
 graphdef, rngstate, state = nnx.split(m, nnx.RngState, ...)
 total_params = count_params(m)
 moe_params = count_params(m, "moe")

@@ -35,10 +35,7 @@ class GLU_Block(nnx.Module):
             dtype=config.dtype,
             rngs=rngs
         )
-        rope_omega = calc_rope_omega_llama(
-            config.n_embed // config.n_head, config.block_size, config.rope_theta, config.dtype
-        )
-        self.attn = Attention(config, rope_omega, rngs)
+        self.attn = Attention(config, rngs)
         self.glu = GLU(config, rngs)
     
 
@@ -63,11 +60,8 @@ class MOE_Block(nnx.Module):
             dtype=config.dtype,
             rngs=rngs
         )
-        rope_omega = calc_rope_omega_llama(
-            config.n_embed // config.n_head, config.block_size, config.rope_theta, config.dtype
-        )
         self.aux_loss = False
-        self.attn = Attention(config, rope_omega, rngs)
+        self.attn = Attention(config, rngs)
         self.moe = MoE(config, rngs)
 
 
@@ -138,5 +132,5 @@ if __name__ == "__main__":
         pspecs = nnx.get_partition_spec(state)
         sharded_state = nnx.with_sharding_constraint(state, pspecs)
         nnx.update(m, sharded_state)
-        y = m(x)["output"]
+        y = m(x)[0]
         assert y.shape == (B, config.block_size, config.vocab_size)
