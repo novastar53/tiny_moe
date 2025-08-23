@@ -43,10 +43,8 @@ class GLU_Block(nnx.Module):
     
 
     def __call__(self, x):
-        o = self.attn(self.rms_n_1(x))
-        x = x + o["output"]
-        o = self.glu(self.rms_n_2(x))
-        x = x + o["output"]
+        x = x + self.attn(self.rms_n_1(x))["output"]
+        x = x + self.glu(self.rms_n_2(x))["output"]
         return {
             "output": x
         }
@@ -70,21 +68,23 @@ class MOE_Block(nnx.Module):
         rope_omega = calc_rope_omega_llama(
             config.n_embed // config.n_head, config.block_size, config.rope_theta, config.dtype
         )
+        self.aux_loss = False
         self.attn = Attention(config, rope_omega, rngs)
         self.moe = MoE(config, rngs)
 
 
     def __call__(self, x):
-        attn_o = self.attn(self.rms_n_1(x))
-        x = x + attn_o["output"]
+        x = x + self.attn(self.rms_n_1(x))["output"]
         moe_o = self.moe(self.rms_n_2(x))
         x = x + moe_o["output"]
-        o =  {
+        if self.aux_loss:
+            return {
+            "output": x,
+            "aux_loss": moe_o["aux_loss"]
+            }
+        return {
             "output": x
         }
-        if "aux_loss" in moe_o:
-            o["aux_loss"] = moe_o["aux_loss"]
-        return o
 
 
 class Tiny_MoE(nnx.Module):
@@ -110,11 +110,12 @@ class Tiny_MoE(nnx.Module):
     def __call__(self, x):
         x = self.embedding(x)
         total_aux_loss = 0
-        for i in range(self.config.n_layer):
+        for i in range(self.config.n_layer // 2):
             o = self.h[i](x)
-            x = o['output'] 
-            if "aux_loss" in o:
+            x = o["output"] 
+            if self.aux_loss:
                 total_aux_loss += o["aux_loss"]
+            x = self.h[i+1](x)["output"]
         x = self.rms_n_f(x)
         logits = self.embedding.attend(x)
         return {

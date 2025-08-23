@@ -5,7 +5,7 @@
 
 import os
 
-#os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./alpha-448101-282bc1b884cd.json"
 
 import time
@@ -38,8 +38,8 @@ from utils import (
     save_checkpoint, save_optimizer_state, step_fn, append_to_csv
 )
 
-# set up logging 
-output_dir = Path("/workspace/training_runs").absolute()
+# Set up logging 
+output_dir = Path("training_runs").absolute()
 timestamp = datetime.now().strftime("%Y%m%d")
 random_code = generate_readable_code()
 run_name = f"run_{timestamp}_{random_code}"
@@ -80,6 +80,7 @@ train_logger.info(f"Devices: {jax.devices()}")
 ## 'F32_F32_F32'
 ## 'F64_F64_F64'
 #####################################
+jax.config.update("jax_default_matmul_precision", "BF16_BF16_F32") 
 
 # Create model
 
@@ -90,7 +91,7 @@ config = Config(
             name="Tiny_MoE",
             dtype=jnp.bfloat16, \
             vocab_size=49152,
-            n_layer=30,
+            n_layer=2,
             block_size=2048,
             n_head=9,
             n_kv_head=3,
@@ -116,9 +117,9 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
   num_tokens: int =  int(228e9)
-  num_tokens_per_batch: int = 2**19 # 2**19, 0.5 million as per the GPT 3.5 paper
-  mB: int = 32 * num_devices
-  T: int = 2048
+  num_tokens_per_batch: int = 2**11 # 2**19, 0.5 million as per the GPT 3.5 paper
+  mB: int = 2 * num_devices
+  T: int = 128
   max_steps: int = int(num_tokens // num_tokens_per_batch)
   max_lr: float = 6e-4
   min_lr: float = max_lr * 0.1
@@ -127,12 +128,14 @@ class TrainerConfig:
   adam_b1: float = 0.9
   adam_b2: float = 0.95
   warmup_steps: int = 9000
-  print_interval: int = 100
+  print_interval: int = 50
   eval_interval: int = 5000
   checkpoint_interval: int = 10000
   grad_accumulation_steps: int = num_tokens_per_batch // (mB * T) # Number of steps over which to average the gradient
 
 trconf = TrainerConfig()
+
+assert(trconf.grad_accumulation_steps == 1)
 
 # Set up optimizer
 
@@ -163,7 +166,7 @@ tx = optax.chain(
 )
 optimizer = nnx.Optimizer(m, tx, wrt=nnx.Param)
 
-# count the number of weight decay params
+# Count the number of weight decay params
 def f(x, y):
     if x:
         return y.size
@@ -191,8 +194,8 @@ train_dl = BlendedCloudDataLoader(
     proportions=[85, 1, 12],
     label="train"
 )
-jax.config.update("jax_default_matmul_precision", "BF16_BF16_F32") 
 
+# Train
 
 with mesh:
     train_losses = []
@@ -208,19 +211,17 @@ with mesh:
             batch = jax.device_put(batch.squeeze(), data_sharding)
             target = jax.device_put(target.squeeze(), data_sharding)
             avg_loss, aux_loss = step_fn(m, optimizer, batch, target)
-            iter_time = time.time() - start
             if step % trconf.print_interval == 0:
-                if not start:
+                if start is False:
                     start = time.time()
-                    iter_time = -1
-                    sub_step_time = -1
-                    tokens_per_sec = -1
+                    iter_time = 0 
+                    tokens_per_sec = 0 
                 else:
-                    iter_time = (time.time() - start) / trconf.print_interval
-                    sub_step_time = iter_time / trconf.grad_accumulation_steps
-                    tokens_per_sec = trconf.mB * trconf.T * trconf.grad_accumulation_steps / iter_time
+                    total_time = (time.time() - start)
+                    iter_time = total_time / trconf.print_interval
+                    tokens_per_sec = trconf.print_interval * trconf.mB * trconf.T / total_time
 
-                tokens_processed = (step+1) * trconf.grad_accumulation_steps * trconf.mB * trconf.T
+                tokens_processed = (step+1) * trconf.mB * trconf.T 
                 lr = get_lr(step)
                 avg_loss = avg_loss.item()
 
@@ -229,9 +230,9 @@ with mesh:
                 train_logger.info(f"{step} | lr: {lr:0.4f} | "
                         f"loss: {avg_loss:0.4f} | "
                         f"aux_loss: {aux_loss:0.4f} | "
-                        f"time: {iter_time*1000:0.2f}ms | "
-                        f"tokens processed: {tokens_processed:,} | "
-                        f"tok/sec: {tokens_per_sec:,.2f}")
+                        f"avg iter time: {iter_time*1000:0.2f}ms | "
+                        f"avg tok/sec: {tokens_per_sec:,.2f} | "
+                        f"tokens processed: {tokens_processed:,}")
                 start = time.time()
             if step > 0 and step % trconf.eval_interval == 0:
                 train_logger.info("Evaluation TBD")
@@ -239,6 +240,7 @@ with mesh:
                 train_logger.info(f"Saving checkpoint at step {step}")
                 save_checkpoint(m, output_dir, run_name, step)
                 save_optimizer_state(m, output_dir, run_name, optimizer)
+            step += 1
     except KeyboardInterrupt:
         train_logger.warning("Received KeyboardInterrupt. Exiting...")
     finally:
