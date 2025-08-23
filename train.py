@@ -115,7 +115,7 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 
 @dataclass
 class TrainerConfig:
-  num_tokens: int =  int(228e9)
+  num_tokens: int =  int(236e9)
   num_tokens_per_batch: int = 2**20 # 2**20 = 1.0 million
   mB: int = 64 * num_devices
   T: int = 2048
