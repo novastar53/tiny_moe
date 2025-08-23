@@ -116,7 +116,7 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
   num_tokens: int =  int(228e9)
-  num_tokens_per_batch: int = 2**19 # 2**20, 1.0 million
+  num_tokens_per_batch: int = 2**19 # 2**20 = 1.0 million
   mB: int = 32 * num_devices
   T: int = 2048
   max_steps: int = int(num_tokens // num_tokens_per_batch)
@@ -197,7 +197,7 @@ train_dl = BlendedCloudDataLoader(
 
 with mesh:
     train_losses = []
-    append_to_csv(log_dir / f"{run_name}_train.csv", ["step", "lr", "loss", "time", "tokens_processed", "tokens_per_sec"])
+    append_to_csv(log_dir / f"{run_name}_train.csv", ["step", "lr", "loss", "aux_loss", "time", "tokens_processed", "tokens_per_sec"])
     train_logger.info(f"Starting from step: {optimizer.step.value.item()}")
     start = False
     data_sharding = NamedSharding(mesh, PartitionSpec("devices",))
