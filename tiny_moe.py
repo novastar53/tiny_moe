@@ -106,7 +106,7 @@ class Tiny_MoE(nnx.Module):
     def __call__(self, x):
         x = self.embedding(x)
         total_aux_loss = 0
-        for i in range(self.config.n_layer // 2):
+        for i in range(0, self.config.n_layer, 2):
             if self.aux_loss:
                 x, aux_loss = self.h[i](x)
                 total_aux_loss += aux_loss
