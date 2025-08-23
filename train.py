@@ -116,8 +116,8 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
   num_tokens: int =  int(228e9)
-  num_tokens_per_batch: int = 2**20 # 2**20, 1.0 million
-  mB: int = 64 * num_devices
+  num_tokens_per_batch: int = 2**19 # 2**20, 1.0 million
+  mB: int = 32 * num_devices
   T: int = 2048
   max_steps: int = int(num_tokens // num_tokens_per_batch)
   max_lr: float = 6e-4
@@ -126,7 +126,7 @@ class TrainerConfig:
   weight_decay: float = 0.1 # Weight decay for adamw
   adam_b1: float = 0.9
   adam_b2: float = 0.95
-  warmup_steps: int = 2200
+  warmup_steps: int = max_steps // 100
   print_interval: int = 100
   eval_interval: int = 5000
   checkpoint_interval: int = 10000
