@@ -8,15 +8,22 @@ from .rope import apply_rope
 class Attention(nnx.Module):
     def __init__(self, config, rope_omega: nnx.Variable, rngs: nnx.Rngs):
         self.config = config
-        self.wq = nnx.Linear(config.n_embed, config.n_embed, 
-                            kernel_init=nnx.initializers.normal(stddev=0.02),
-                            use_bias=False,
-                            dtype=config.dtype,
-                            rngs=rngs)
+        self.wq = nnx.Linear(
+            config.n_embed,
+            config.n_embed,
+            kernel_init=nnx.with_partitioning(
+                nnx.initializers.normal(stddev=0.02), (None,)
+            ),
+            use_bias=False,
+            dtype=config.dtype,
+            rngs=rngs,
+        )
         self.wkv = nnx.Linear(
             config.n_embed,
             2 * config.n_kv_head * config.n_embed // config.n_head,
-            kernel_init=nnx.initializers.normal(stddev=0.02),
+            kernel_init=nnx.with_partitioning(
+                nnx.initializers.normal(stddev=0.02), (None,)
+            ),
             use_bias=False,
             dtype=config.dtype,
             rngs=rngs,
@@ -24,10 +31,12 @@ class Attention(nnx.Module):
         self.wproj = nnx.Linear(
             config.n_embed,
             config.n_embed,
-            kernel_init=nnx.initializers.normal(stddev=0.02 * (2 * self.config.n_layer) ** -0.5),
+            kernel_init=nnx.with_partitioning(
+                nnx.initializers.normal(stddev=0.02 * (2 * self.config.n_layer) ** -0.5), (None,)
+            ),
             use_bias=False,
             dtype=config.dtype,
-            rngs=rngs
+            rngs=rngs,
         )
         self.rope_omega = rope_omega
 
@@ -49,46 +58,44 @@ class Attention(nnx.Module):
 
         implementation = self.config.sdpa_implementation
 
-        if implementation in ("cudnn", "xla"):
-            y = jax.nn.dot_product_attention(
-                q,
-                k,
-                v,
-                mask=None,
-                bias=None,
-                is_causal=True,
-                implementation=implementation,
-            )
-        else:
-            _, _, n_head, hs = q.shape
-            _, _, n_kv_head, _ = k.shape
+        match implementation:
+            case "cudnn" | "xla":
+                y = jax.nn.dot_product_attention(
+                    q,
+                    k,
+                    v,
+                    mask=None,
+                    bias=None,
+                    is_causal=True,
+                    implementation=implementation,
+                )
+            case _:
+                _, _, n_head, hs = q.shape
+                _, _, n_kv_head, _ = k.shape
 
-            G = n_head // n_kv_head
+                G = n_head // n_kv_head
 
-            q = q.reshape((B, T, n_kv_head, G, hs))  # (B, T, n_kv_head, G, hs)
-            q = jnp.transpose(q, axes=(0, 2, 3, 1, 4))
+                q = q.reshape((B, T, n_kv_head, G, hs))  # (B, T, n_kv_head, G, hs)
+                q = jnp.transpose(q, axes=(0, 2, 3, 1, 4))
 
-            k = k.reshape(-1, T, n_kv_head, 1, hs)  # (B, T, n_kv_head, 1, hs)
-            k = jnp.transpose(k, axes=(0, 2, 3, 4, 1))
+                k = k.reshape(-1, T, n_kv_head, 1, hs)  # (B, T, n_kv_head, 1, hs)
+                k = jnp.transpose(k, axes=(0, 2, 3, 4, 1))
 
-            v = v.reshape(-1, T, n_kv_head, 1, hs)  # (B, T, n_kv_head, 1, hs)
-            v = jnp.transpose(v, axes=(0, 2, 3, 1, 4))
+                v = v.reshape(-1, T, n_kv_head, 1, hs)  # (B, T, n_kv_head, 1, hs)
+                v = jnp.transpose(v, axes=(0, 2, 3, 1, 4))
 
-            att = (q @ k) / jnp.sqrt(hs)  # (B, n_kv_head, G, T, T)
+                att = (q @ k) / jnp.sqrt(hs)  # (B, n_kv_head, G, T, T)
 
-            mask = jnp.tril(jnp.ones((T, T), dtype=jnp.bool))[None, None, None, ...]
-            att = jnp.where(mask == False, float("-inf"), att)
-            att = jax.nn.softmax(att, axis=-1)
-            y = att @ v
-            y = y.transpose((0, 3, 1, 2, 4))  # (B, T, n_kv_head, G, hs)
-            y = y.reshape(B, T, n_head, hs)  # (B, T, n_head, hs)
+                mask = jnp.tril(jnp.ones((T, T), dtype=jnp.bool))[None, None, None, ...]
+                att = jnp.where(mask == False, float("-inf"), att)
+                att = jax.nn.softmax(att, axis=-1)
+                y = att @ v
+                y = y.transpose((0, 3, 1, 2, 4))  # (B, T, n_kv_head, G, hs)
+                y = y.reshape(B, T, n_head, hs)  # (B, T, n_head, hs)
 
         y = jnp.reshape(y, (B, T, C))
         y = self.wproj(y)
-
-        return {
-            "output": y
-        }
+        return y
 
 
 if __name__ == "__main__":

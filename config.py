@@ -18,6 +18,7 @@ class Config:
     n_head: int = 9
     n_kv_head: int = 3
     n_experts: int = 8
+    init_stddev: float = 0.02
     expert_load_factor: float = 2.5
     aux_loss_coeff: float = 0.01
     expert_top_k: int = 2

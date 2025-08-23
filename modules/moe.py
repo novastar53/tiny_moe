@@ -12,7 +12,9 @@ class MoE(nnx.Module):
         self.gate_noise_rngstream = rngs.gate_noise
 
         self.router_gate = nnx.Linear(config.n_embed, config.n_experts, 
-                                      kernel_init=nnx.initializers.normal(stddev=0.02),
+                                      kernel_init=nnx.with_partitioning(
+                                          nnx.initializers.normal(stddev=0.02),
+                                          (None,)),
                                       use_bias=False,
                                       dtype=config.dtype, 
                                       rngs=rngs)
@@ -46,6 +48,7 @@ class MoE(nnx.Module):
     def _apply_experts(self, x):
         (x, w_fc, w_gate, w_proj) = dtypes.promote_dtype(
         (x, self.w_fc.value, self.w_gate.value, self.w_proj.value), dtype=self.config.dtype)
+        x = jax.lax.with_sharding_constraint(x, self.config.expert_partition_spec)
         g = jnp.einsum("enc,ech->enh", x, w_gate)
         h = jnp.einsum("enc,ech->enh", x, w_fc)
         h = nnx.silu(g) * h
@@ -110,6 +113,10 @@ class MoE(nnx.Module):
             x, gate_probs
         )  # B, n_experts, expert_cap, C
 
+        top_k_probs = jax.lax.with_sharding_constraint(top_k_probs, self.config.expert_partition_spec)
+        expert_positions = jax.lax.with_sharding_constraint(expert_positions, self.config.expert_partition_spec)
+        expert_indices = jax.lax.with_sharding_constraint(expert_indices, self.config.expert_partition_spec)
+        expert_inputs = jax.lax.with_sharding_constraint(expert_inputs, self.config.expert_partition_spec) # B, n_experts, expert_cap, C
 
         if B % self.config.n_experts == 0:
             expert_inputs = expert_inputs.reshape(self.config.n_experts, -1, self.config.n_experts, expert_cap_per_batch, C) # n_experts, batch_per_expert, n_experts, expert_cap, C
@@ -136,6 +143,7 @@ class MoE(nnx.Module):
         y_pred = jax.vmap(
             lambda eo, ei, ep, topk: self._collect_outputs(eo, ei, ep, topk)
         )(expert_outputs, expert_indices, expert_positions, top_k_probs)
+
         y_pred = jax.lax.with_sharding_constraint(
             y_pred, self.config.expert_partition_spec
         )
@@ -146,14 +154,9 @@ class MoE(nnx.Module):
             ) / (2 * B * T)
             frac_router_probs = jnp.sum(gate_probs, axis=(0, 1)) / (B * T)
             aux_loss = jnp.sum(frac_tokens * frac_router_probs) * self.config.n_experts
-            return {
-                "output": y_pred, 
-                "aux_loss": aux_loss
-            }
+            return y_pred, aux_loss
 
-        return {
-            "output": y_pred
-        }
+        return y_pred
 
 
 if __name__ == "__main__":

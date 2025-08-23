@@ -46,7 +46,7 @@ def _from_checkpoint(
     default = jax.random.key(1337)
     gate_noise = jax.random.key(42)
     rngs = nnx.Rngs(default=default, gate_noise=gate_noise)
-    config = config if config else Tiny_MoE_Config()
+    config = config if config else Config()
     abstract_model = nnx.eval_shape( 
         lambda: Tiny_MoE(config=config, rngs=nnx.Rngs(default=default, gate_noise=gate_noise))
     )
@@ -124,8 +124,7 @@ def save_optimizer_state(m, output_dir, run_dirname, optimizer):
   cp.wait_until_finished()
 
 
-
-def load_optimizer_state(model, optimizer, run_dirname, step):
+def load_optimizer_state(model, optimizer, run_dirname, output_dir, step):
   cp = ocp.StandardCheckpointer()
   graphdef, state = nnx.split(optimizer)
   state = cp.restore(output_dir / optimizer.model.config.name / "optimizer_checkpoints" / run_dirname / f"step-{step}", target=state)
@@ -152,9 +151,7 @@ def count_params(m: nnx.Module, layer_type: str | None = None) -> int:
 
 
 def loss_fn(model, x, y):
-    output = model(x)
-    logits = output["output"]
-    aux_loss = output["aux_loss"]
+    logits, aux_loss = model(x)
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, y)
     return loss.mean() + model.config.aux_loss_coeff * aux_loss, aux_loss
 
