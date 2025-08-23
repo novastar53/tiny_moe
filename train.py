@@ -97,7 +97,7 @@ config = Config(
             n_kv_head=3,
             n_embed=576,
             n_glu_hidden=1536,
-            expert_load_factor=1.1,
+            expert_load_factor=1.25,
             sdpa_implementation="cudnn" if device=="gpu" else "xla")
 train_logger.info(f"Model config:\n{pformat(config)}")
 
