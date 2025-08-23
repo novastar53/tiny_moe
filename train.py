@@ -39,7 +39,7 @@ from utils import (
 )
 
 # Set up logging 
-output_dir = Path("training_runs").absolute()
+output_dir = Path("/workspace/training_runs").absolute()
 timestamp = datetime.now().strftime("%Y%m%d")
 random_code = generate_readable_code()
 run_name = f"run_{timestamp}_{random_code}"
@@ -116,8 +116,8 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
   num_tokens: int =  int(228e9)
-  num_tokens_per_batch: int = 2**19 # 2**19, 0.5 million as per the GPT 3.5 paper
-  mB: int = 32 * num_devices
+  num_tokens_per_batch: int = 2**20 # 2**20, 1.0 million
+  mB: int = 64 * num_devices
   T: int = 2048
   max_steps: int = int(num_tokens // num_tokens_per_batch)
   max_lr: float = 6e-4
@@ -126,8 +126,8 @@ class TrainerConfig:
   weight_decay: float = 0.1 # Weight decay for adamw
   adam_b1: float = 0.9
   adam_b2: float = 0.95
-  warmup_steps: int = 9000
-  print_interval: int = 10
+  warmup_steps: int = 2200
+  print_interval: int = 100
   eval_interval: int = 5000
   checkpoint_interval: int = 10000
   grad_accumulation_steps: int = num_tokens_per_batch // (mB * T) # Number of steps over which to average the gradient
@@ -238,7 +238,6 @@ with mesh:
                 train_logger.info(f"Saving checkpoint at step {step}")
                 save_checkpoint(m, output_dir, run_name, step)
                 save_optimizer_state(m, output_dir, run_name, optimizer)
-            step += 1
     except KeyboardInterrupt:
         train_logger.warning("Received KeyboardInterrupt. Exiting...")
     finally:
