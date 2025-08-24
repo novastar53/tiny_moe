@@ -27,17 +27,16 @@ class GLU_Block(nnx.Module):
             config.n_embed,
             scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
             dtype=config.dtype,
-            rngs=rngs
+            rngs=rngs,
         )
         self.rms_n_2 = nnx.RMSNorm(
             config.n_embed,
             scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
             dtype=config.dtype,
-            rngs=rngs
+            rngs=rngs,
         )
         self.attn = Attention(config, rngs)
         self.glu = GLU(config, rngs)
-    
 
     def __call__(self, x):
         x = x + self.attn(self.rms_n_1(x))
@@ -52,18 +51,17 @@ class MOE_Block(nnx.Module):
             config.n_embed,
             scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
             dtype=config.dtype,
-            rngs=rngs
+            rngs=rngs,
         )
         self.rms_n_2 = nnx.RMSNorm(
             config.n_embed,
             scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
             dtype=config.dtype,
-            rngs=rngs
+            rngs=rngs,
         )
         self.aux_loss = False
         self.attn = Attention(config, rngs)
         self.moe = MoE(config, rngs)
-
 
     def __call__(self, x):
         x = x + self.attn(self.rms_n_1(x))
@@ -81,10 +79,15 @@ class Tiny_MoE(nnx.Module):
     def __init__(self, config: Config, rngs: nnx.Rngs):
         self.config = config
         self.aux_loss = False
-        self.embedding = nnx.Embed(config.vocab_size, config.n_embed,
-                                   embedding_init=nnx.with_partitioning(nnx.initializers.normal(stddev=0.02), (None,)), 
-                                   dtype=config.dtype,
-                                   rngs=rngs)
+        self.embedding = nnx.Embed(
+            config.vocab_size,
+            config.n_embed,
+            embedding_init=nnx.with_partitioning(
+                nnx.initializers.normal(stddev=0.02), (None,)
+            ),
+            dtype=config.dtype,
+            rngs=rngs,
+        )
         self.h = []
         for _ in range(config.n_layer // 2):
             self.h += [
@@ -92,10 +95,12 @@ class Tiny_MoE(nnx.Module):
                 GLU_Block(config, rngs=rngs),
             ]
 
-        self.rms_n_f = nnx.RMSNorm(config.n_embed,
-                                   dtype=config.dtype,
-                                   scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)), rngs=rngs)
- 
+        self.rms_n_f = nnx.RMSNorm(
+            config.n_embed,
+            dtype=config.dtype,
+            scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
+            rngs=rngs,
+        )
 
     def __call__(self, x):
         x = self.embedding(x)
@@ -106,7 +111,7 @@ class Tiny_MoE(nnx.Module):
                 total_aux_loss += aux_loss
             else:
                 x = self.h[i](x)
-            x = self.h[i+1](x)
+            x = self.h[i + 1](x)
         x = self.rms_n_f(x)
         logits = self.embedding.attend(x)
         return logits, total_aux_loss

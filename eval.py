@@ -33,12 +33,9 @@ from logging_config import setup_logging
 from tiny_moe import Tiny_MoE, Config
 from generate import generate
 from dataloader import BlendedCloudDataLoader
-from utils import (
-    count_params, 
-    load_checkpoint
-)
+from utils import count_params, load_checkpoint
 
-# set up logging 
+# set up logging
 output_dir = Path("training_runs").absolute()
 run_name = "run_20250822_czechic_hovel"
 log_dir = output_dir / "Tiny_MoE" / "logs"
@@ -80,25 +77,25 @@ eval_logger.info(f"Devices: {jax.devices()}")
 
 # Create model
 
-rngs = nnx.Rngs(default=jax.random.key(1337), 
-                gate_noise=jax.random.key(42))
+rngs = nnx.Rngs(default=jax.random.key(1337), gate_noise=jax.random.key(42))
 
 config = Config(
-            name="Tiny_MoE",
-            dtype=jnp.bfloat16, \
-            vocab_size=49152,
-            n_layer=4,
-            block_size=2048,
-            n_head=9,
-            n_kv_head=3,
-            n_embed=576,
-            n_glu_hidden=1536,
-            expert_load_factor=1.1,
-            sdpa_implementation="cudnn" if device=="gpu" else "xla")
+    name="Tiny_MoE",
+    dtype=jnp.bfloat16,
+    vocab_size=49152,
+    n_layer=4,
+    block_size=2048,
+    n_head=9,
+    n_kv_head=3,
+    n_embed=576,
+    n_glu_hidden=1536,
+    expert_load_factor=1.1,
+    sdpa_implementation="cudnn" if device == "gpu" else "xla",
+)
 eval_logger.info(f"Model config:\n{pformat(config)}")
 
 mesh = jax.sharding.Mesh(jax.devices(), ["devices"])
-#m = create_sharded_model(config, mesh, rngs)
+# m = create_sharded_model(config, mesh, rngs)
 with mesh:
     m = load_checkpoint(output_dir, config, run_name, 95, rngs)
 
@@ -110,12 +107,12 @@ eval_logger.info(f"Parameter Count: {total_params:,}")
 eval_logger.info(f"Sharded / MoE Parameter Count: {moe_params:,}")
 eval_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 
-#plt.figure(figsize=(7, 5))
-#plt.plot([x[0] for x in train_losses], [x[1] for x in train_losses], label="train loss")
-#plt.yticks(ticks=np.arange(0, 12, 0.5))
-#plt.grid()
-#plt.legend()
-#plt.show()
+# plt.figure(figsize=(7, 5))
+# plt.plot([x[0] for x in train_losses], [x[1] for x in train_losses], label="train loss")
+# plt.yticks(ticks=np.arange(0, 12, 0.5))
+# plt.grid()
+# plt.legend()
+# plt.show()
 
 with mesh:
     tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")

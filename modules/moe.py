@@ -11,13 +11,17 @@ class MoE(nnx.Module):
         self.aux_loss = False
         self.gate_noise_rngstream = rngs.gate_noise
 
-        self.router_gate = nnx.Linear(config.n_embed, config.n_experts, 
-                                      kernel_init=nnx.with_partitioning(
-                                          nnx.initializers.normal(stddev=0.02),
-                                          (None,)),
-                                      use_bias=False,
-                                      dtype=config.dtype, 
-                                      rngs=rngs)
+        self.router_gate = nnx.Linear(
+            config.n_embed,
+            config.n_experts,
+            kernel_init=nnx.with_partitioning(
+                nnx.initializers.normal(stddev=0.02), (None,)
+            ),
+            bias_init=nnx.with_partitioning(nnx.initializers.zeros,
+            sharding=(None,)),
+            dtype=config.dtype,
+            rngs=rngs,
+        )
 
         w_fc_init = nnx.with_partitioning(
             nnx.initializers.normal(stddev=0.02),
@@ -31,7 +35,8 @@ class MoE(nnx.Module):
 
         self.w_fc = nnx.Param(
             w_fc_init(
-                rngs.default(), (config.n_experts, config.n_embed, config.n_glu_hidden), 
+                rngs.default(),
+                (config.n_experts, config.n_embed, config.n_glu_hidden),
             )
         )
         self.w_gate = nnx.Param(
@@ -45,17 +50,51 @@ class MoE(nnx.Module):
             )
         )
 
+        b_init = nnx.with_partitioning(
+            nnx.initializers.zeros, sharding=self.config.expert_partition_spec
+        )
+
+        self.b_proj = nnx.Param(
+            b_init(
+                rngs.default(),
+                (config.n_experts, 1, config.n_embed),
+            )
+        )
+
+        self.b_gate = nnx.Param(
+            b_init(
+                rngs.default(),
+                (config.n_experts, 1, config.n_glu_hidden),
+            )
+        )
+
+        self.b_fc = nnx.Param(
+            b_init(
+                rngs.default(),
+                (config.n_experts, 1, config.n_glu_hidden),
+            )
+        )
+
     def _apply_experts(self, x):
-        (x, w_fc, w_gate, w_proj) = dtypes.promote_dtype(
-        (x, self.w_fc.value, self.w_gate.value, self.w_proj.value), dtype=self.config.dtype)
+        (x, w_fc, w_gate, w_proj, b_fc, b_gate, b_proj) = dtypes.promote_dtype(
+            (
+                x,
+                self.w_fc.value,
+                self.w_gate.value,
+                self.w_proj.value,
+                self.b_fc,
+                self.b_gate,
+                self.b_proj,
+            ),
+            dtype=self.config.dtype,
+        )
         x = jax.lax.with_sharding_constraint(x, self.config.expert_partition_spec)
-        g = jnp.einsum("enc,ech->enh", x, w_gate)
-        h = jnp.einsum("enc,ech->enh", x, w_fc)
+        g = jnp.einsum("enc,ech->enh", x, w_gate) + b_gate
+        h = jnp.einsum("enc,ech->enh", x, w_fc) + b_fc
         h = nnx.silu(g) * h
-        o = jnp.einsum("enh,ehc->enc", h, w_proj)
+        o = jnp.einsum("enh,ehc->enc", h, w_proj) + b_proj
         o = jax.lax.with_sharding_constraint(o, self.config.expert_partition_spec)
         return o
-
 
     def assign_per_batch_experts(self, x, gate_probs, expert_cap):
         _, C = x.shape
@@ -96,7 +135,9 @@ class MoE(nnx.Module):
         g = self.router_gate(x)
         if self.add_noise:
             noise = (
-                jax.random.normal(self.gate_noise_rngstream(), g.shape, dtype=self.config.dtype)
+                jax.random.normal(
+                    self.gate_noise_rngstream(), g.shape, dtype=self.config.dtype
+                )
                 / self.config.n_experts
             )
             g += noise
@@ -113,32 +154,70 @@ class MoE(nnx.Module):
             x, gate_probs
         )  # B, n_experts, expert_cap, C
 
-        top_k_probs = jax.lax.with_sharding_constraint(top_k_probs, self.config.expert_partition_spec)
-        expert_positions = jax.lax.with_sharding_constraint(expert_positions, self.config.expert_partition_spec)
-        expert_indices = jax.lax.with_sharding_constraint(expert_indices, self.config.expert_partition_spec)
-        expert_inputs = jax.lax.with_sharding_constraint(expert_inputs, self.config.expert_partition_spec) # B, n_experts, expert_cap, C
+        top_k_probs = jax.lax.with_sharding_constraint(
+            top_k_probs, self.config.expert_partition_spec
+        )
+        expert_positions = jax.lax.with_sharding_constraint(
+            expert_positions, self.config.expert_partition_spec
+        )
+        expert_indices = jax.lax.with_sharding_constraint(
+            expert_indices, self.config.expert_partition_spec
+        )
+        expert_inputs = jax.lax.with_sharding_constraint(
+            expert_inputs, self.config.expert_partition_spec
+        )  # B, n_experts, expert_cap, C
 
         if B % self.config.n_experts == 0:
-            expert_inputs = expert_inputs.reshape(self.config.n_experts, -1, self.config.n_experts, expert_cap_per_batch, C) # n_experts, batch_per_expert, n_experts, expert_cap, C
-            expert_inputs = jnp.swapaxes(expert_inputs, 0, 2) # n_experts, batch_per_expert, n_experts, expert_cap, C
+            expert_inputs = expert_inputs.reshape(
+                self.config.n_experts,
+                -1,
+                self.config.n_experts,
+                expert_cap_per_batch,
+                C,
+            )  # n_experts, batch_per_expert, n_experts, expert_cap, C
+            expert_inputs = jnp.swapaxes(
+                expert_inputs, 0, 2
+            )  # n_experts, batch_per_expert, n_experts, expert_cap, C
         else:
-            expert_inputs = jnp.swapaxes(expert_inputs, 0, 1) # n_experts, B, expert_cap, C
+            expert_inputs = jnp.swapaxes(
+                expert_inputs, 0, 1
+            )  # n_experts, B, expert_cap, C
 
-        expert_inputs = expert_inputs.reshape(-1, C) # n_experts * B * expert_cap, C
-        expert_inputs = jax.lax.with_sharding_constraint(expert_inputs, self.config.expert_partition_spec)
-        expert_inputs = expert_inputs.reshape(self.config.n_experts, B * expert_cap_per_batch, C) # n_experts, B * expert_cap, C
+        expert_inputs = expert_inputs.reshape(-1, C)  # n_experts * B * expert_cap, C
+        expert_inputs = jax.lax.with_sharding_constraint(
+            expert_inputs, self.config.expert_partition_spec
+        )
+        expert_inputs = expert_inputs.reshape(
+            self.config.n_experts, B * expert_cap_per_batch, C
+        )  # n_experts, B * expert_cap, C
 
         expert_outputs = self._apply_experts(expert_inputs)
 
         if B % self.config.n_experts == 0:
-            expert_outputs = expert_outputs.reshape(self.config.n_experts, -1, self.config.n_experts, expert_cap_per_batch, C) # n_experts, batch_per_expert, n_experts, expert_cap, C
-            expert_outputs = jnp.swapaxes(expert_outputs, 0, 2) # n_experts, batch_per_expert, n_experts, expert_cap, C
-            expert_outputs = expert_outputs.reshape(B, self.config.n_experts, expert_cap_per_batch, C) # B, n_experts, expert_cap, C
+            expert_outputs = expert_outputs.reshape(
+                self.config.n_experts,
+                -1,
+                self.config.n_experts,
+                expert_cap_per_batch,
+                C,
+            )  # n_experts, batch_per_expert, n_experts, expert_cap, C
+            expert_outputs = jnp.swapaxes(
+                expert_outputs, 0, 2
+            )  # n_experts, batch_per_expert, n_experts, expert_cap, C
+            expert_outputs = expert_outputs.reshape(
+                B, self.config.n_experts, expert_cap_per_batch, C
+            )  # B, n_experts, expert_cap, C
         else:
-            expert_outputs = expert_outputs.reshape(self.config.n_experts, B, expert_cap_per_batch, C) # n_experts, B, expert_cap, C
-            expert_outputs = jnp.swapaxes(expert_outputs, 0, 1) # B, n_experts, expert_cap, C
+            expert_outputs = expert_outputs.reshape(
+                self.config.n_experts, B, expert_cap_per_batch, C
+            )  # n_experts, B, expert_cap, C
+            expert_outputs = jnp.swapaxes(
+                expert_outputs, 0, 1
+            )  # B, n_experts, expert_cap, C
 
-        expert_outputs = jax.lax.with_sharding_constraint(expert_outputs, self.config.expert_partition_spec)
+        expert_outputs = jax.lax.with_sharding_constraint(
+            expert_outputs, self.config.expert_partition_spec
+        )
 
         y_pred = jax.vmap(
             lambda eo, ei, ep, topk: self._collect_outputs(eo, ei, ep, topk)

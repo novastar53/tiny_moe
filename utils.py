@@ -22,11 +22,11 @@ def append_to_csv(file_path, row):
 
 
 def generate_readable_code():
-    words = [w.lower() for w in get_english_words_set(['web2']) if 4 <= len(w) <= 8]
+    words = [w.lower() for w in get_english_words_set(["web2"]) if 4 <= len(w) <= 8]
     return f"{random.choice(words)}_{random.choice(words)}"
 
 
-@nnx.jit(static_argnums=(0,1))
+@nnx.jit(static_argnums=(0, 1))
 def create_sharded_model(config: Config, mesh: jax.sharding.Mesh, rngs: nnx.Rngs):
     with mesh:
         m = Tiny_MoE(config, rngs)
@@ -38,36 +38,43 @@ def create_sharded_model(config: Config, mesh: jax.sharding.Mesh, rngs: nnx.Rngs
 
 
 def _from_checkpoint(
-    fpath: str, rngs: nnx.Rngs, 
-    config: Optional[Config] = None, 
-    sharding: Optional[jax.sharding.NamedSharding] = None
+    fpath: str,
+    rngs: nnx.Rngs,
+    config: Optional[Config] = None,
+    sharding: Optional[jax.sharding.NamedSharding] = None,
 ):
 
     default = jax.random.key(1337)
     gate_noise = jax.random.key(42)
     rngs = nnx.Rngs(default=default, gate_noise=gate_noise)
     config = config if config else Config()
-    abstract_model = nnx.eval_shape( 
-        lambda: Tiny_MoE(config=config, rngs=nnx.Rngs(default=default, gate_noise=gate_noise))
+    abstract_model = nnx.eval_shape(
+        lambda: Tiny_MoE(
+            config=config, rngs=nnx.Rngs(default=default, gate_noise=gate_noise)
+        )
     )
-    graphdef, rngstate, other_state = nnx.split(
-        abstract_model, nnx.RngState, ...
-    )
-    #pspecs = nnx.get_partition_spec(other_state)
-    #sharded_state = nnx.with_sharding_constraint(other_state, pspecs)
+    graphdef, rngstate, other_state = nnx.split(abstract_model, nnx.RngState, ...)
+    # pspecs = nnx.get_partition_spec(other_state)
+    # sharded_state = nnx.with_sharding_constraint(other_state, pspecs)
     checkpointer = ocp.StandardCheckpointer()
     other_state = checkpointer.restore(fpath, target=other_state)
     model = nnx.merge(graphdef, rngstate, other_state)
     for i in range(len(model.h)):
         if hasattr(model.h[i], "moe"):
-            #model.h[i].moe.gate_noise_rngstream = rngs["gate_noise"].fork()
-            model.h[i].moe.gate_noise_rngstream = rngs.gate_noise # TODO: Temporary fix for backward compatibility with jax 0.5.2
+            # model.h[i].moe.gate_noise_rngstream = rngs["gate_noise"].fork()
+            model.h[i].moe.gate_noise_rngstream = (
+                rngs.gate_noise
+            )  # TODO: Temporary fix for backward compatibility with jax 0.5.2
     return model
 
 
 def load_checkpoint(output_dir, config, run_dirname, step, rngs):
     checkpoint_path = (
-        output_dir / config.name / "model_checkpoints" / run_dirname / f"checkpoint-{step}.pt"
+        output_dir
+        / config.name
+        / "model_checkpoints"
+        / run_dirname
+        / f"checkpoint-{step}.pt"
     )
     m = _from_checkpoint(checkpoint_path, rngs, config)
     return m
@@ -100,9 +107,7 @@ def load_checkpoint_from_gcloud(
 
 
 def save_checkpoint(m, output_dir, run_dirname, step):
-    checkpoint_dirpath = (
-        output_dir / m.config.name / "model_checkpoints" / run_dirname
-    )
+    checkpoint_dirpath = output_dir / m.config.name / "model_checkpoints" / run_dirname
     checkpoint_dirpath.mkdir(parents=True, exist_ok=True)
     checkpoint_path = checkpoint_dirpath / f"checkpoint-{step}.pt"
     print(f"Saving model checkpoint to {checkpoint_path}")
@@ -113,23 +118,30 @@ def save_checkpoint(m, output_dir, run_dirname, step):
 
 
 def save_optimizer_state(m, output_dir, run_dirname, optimizer):
-  state_dirpath = (
-    output_dir / m.config.name / "optimizer_checkpoints" / run_dirname
-  )
-  state_dirpath.mkdir(parents=True, exist_ok=True)
-  cp = ocp.StandardCheckpointer()
-  print(f"Saving optimizer state to {state_dirpath}/step-{optimizer.step.value.item()}")
-  state = nnx.state(optimizer)
-  cp.save(state_dirpath / f"step-{optimizer.step.value.item()}", state)
-  cp.wait_until_finished()
+    state_dirpath = output_dir / m.config.name / "optimizer_checkpoints" / run_dirname
+    state_dirpath.mkdir(parents=True, exist_ok=True)
+    cp = ocp.StandardCheckpointer()
+    print(
+        f"Saving optimizer state to {state_dirpath}/step-{optimizer.step.value.item()}"
+    )
+    state = nnx.state(optimizer)
+    cp.save(state_dirpath / f"step-{optimizer.step.value.item()}", state)
+    cp.wait_until_finished()
 
 
 def load_optimizer_state(model, optimizer, run_dirname, output_dir, step):
-  cp = ocp.StandardCheckpointer()
-  graphdef, state = nnx.split(optimizer)
-  state = cp.restore(output_dir / optimizer.model.config.name / "optimizer_checkpoints" / run_dirname / f"step-{step}", target=state)
-  optimizer = nnx.merge(graphdef, state)
-  return optimizer
+    cp = ocp.StandardCheckpointer()
+    graphdef, state = nnx.split(optimizer)
+    state = cp.restore(
+        output_dir
+        / optimizer.model.config.name
+        / "optimizer_checkpoints"
+        / run_dirname
+        / f"step-{step}",
+        target=state,
+    )
+    optimizer = nnx.merge(graphdef, state)
+    return optimizer
 
 
 def count_params(m: nnx.Module, layer_type: str | None = None) -> int:
@@ -161,4 +173,3 @@ def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
     (loss, aux_loss), grads = nnx.value_and_grad(loss_fn, has_aux=True)(model, x, y)
     optimizer.update(model, grads)
     return loss, aux_loss
-

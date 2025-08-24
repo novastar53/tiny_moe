@@ -5,7 +5,7 @@
 
 import os
 
-#os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./alpha-448101-282bc1b884cd.json"
 
 import time
@@ -39,7 +39,7 @@ from utils import (
 )
 
 # Set up logging 
-output_dir = Path("/workspace/training_runs").absolute()
+output_dir = Path("training_runs").absolute()
 timestamp = datetime.now().strftime("%Y%m%d")
 random_code = generate_readable_code()
 run_name = f"run_{timestamp}_{random_code}"
@@ -91,7 +91,7 @@ config = Config(
             name="Tiny_MoE",
             dtype=jnp.bfloat16, \
             vocab_size=49152,
-            n_layer=30,
+            n_layer=2,
             block_size=2048,
             n_head=9,
             n_kv_head=3,
@@ -116,9 +116,9 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
   num_tokens: int =  int(236e9)
-  num_tokens_per_batch: int = 2**20 # 2**20 = 1.0 million
-  mB: int = 64 * num_devices
-  T: int = 2048
+  num_tokens_per_batch: int = 2**11 # 2**20 = 1.0 million
+  mB: int = 2 * num_devices
+  T: int = 128
   max_steps: int = int(num_tokens // num_tokens_per_batch)
   max_lr: float = 6e-4
   min_lr: float = max_lr * 0.1
@@ -127,7 +127,7 @@ class TrainerConfig:
   adam_b1: float = 0.9
   adam_b2: float = 0.95
   warmup_steps: int = max_steps // 100
-  print_interval: int = 100
+  print_interval: int = 1
   eval_interval: int = 5000
   checkpoint_interval: int = 10000
   grad_accumulation_steps: int = num_tokens_per_batch // (mB * T) # Number of steps over which to average the gradient

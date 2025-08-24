@@ -20,7 +20,7 @@ class Dataloader:
 
         with open(Path().absolute() / "datasets" / "panchatantra-ryder-clean.txt") as f:
             text = f.read()
-            #tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
+            # tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
             tokenizer = tiktoken.get_encoding("gpt2")
             self.tokens = tokenizer.encode(text)
 
@@ -89,7 +89,8 @@ class BaseDataLoader(ABC):
         self.shard_size = len(self.shard)
 
         if not quiet:
-            logger.info(f"""{self.__class__.__name__} initialized:
+            logger.info(
+                f"""{self.__class__.__name__} initialized:
 ------------------------
 label:          {label}
 shards:         {len(self.shards):,}
@@ -99,7 +100,8 @@ block size:     {self.T}
 device rank:    {self.D}
 start shard:    {start_shard}
 start pos:      {start_shard_pos}
-------------------------""")
+------------------------"""
+            )
 
     def __len__(self):
         return len(self.shards) * self.shard_size
@@ -149,7 +151,6 @@ start pos:      {start_shard_pos}
         pass
 
 
-
 class CloudDataLoader(BaseDataLoader):
     """
     DataLoader that reads token shards from a Google Cloud Storage bucket.
@@ -185,9 +186,7 @@ class CloudDataLoader(BaseDataLoader):
 
     def _list_shards(self, label):
         blobs = self.bucket.list_blobs(prefix=self.bucket_prefix)
-        return [
-            blob.name for blob in blobs if (label is None or label in blob.name)
-        ]
+        return [blob.name for blob in blobs if (label is None or label in blob.name)]
 
     def _load_shard(self):
         from io import BytesIO
@@ -204,8 +203,7 @@ class CloudDataLoader(BaseDataLoader):
         return tokens
 
 
-
-class BlendedCloudDataLoader():
+class BlendedCloudDataLoader:
     def __init__(
         self,
         batch_size: int,
@@ -213,7 +211,7 @@ class BlendedCloudDataLoader():
         bucket_names: List[str],
         bucket_prefixes: List[str],
         proportions: List[float],
-        device_rank: int, 
+        device_rank: int,
         label: str | None = None,
         quiet: bool = False,
         start_shards: List[int] = None,
@@ -231,7 +229,9 @@ class BlendedCloudDataLoader():
             start_shards = [0] * n
         if start_shard_positions is None:
             start_shard_positions = [0] * n
-        for i, (bucket_name, bucket_prefix, batch_size) in enumerate(zip(bucket_names, bucket_prefixes, batch_sizes)):
+        for i, (bucket_name, bucket_prefix, batch_size) in enumerate(
+            zip(bucket_names, bucket_prefixes, batch_sizes)
+        ):
             self.dataloaders.append(
                 CloudDataLoader(
                     bucket_name,
@@ -252,17 +252,17 @@ class BlendedCloudDataLoader():
             _X, _Y = dataloader()
             X.append(_X)
             Y.append(_Y)
-        
+
         X = np.concatenate(X, axis=1)
         Y = np.concatenate(Y, axis=1)
 
-        assert(X.shape == (self.D, self.B, self.T))
+        assert X.shape == (self.D, self.B, self.T)
 
         return X, Y
 
     def _calc_batch_sizes(self, B, ratios):
         ratios = np.array(ratios)
-        assert(B >= len(ratios))
+        assert B >= len(ratios)
         batch_proportions = jnp.astype(B * ratios / sum(ratios), jnp.int32)
         if sum(batch_proportions) < B:
             diff = B - sum(batch_proportions)
@@ -270,5 +270,5 @@ class BlendedCloudDataLoader():
                 min_idx = jnp.argmin(batch_proportions)
                 batch_proportions = batch_proportions.at[min_idx].add(1)
                 diff -= 1
-        assert(sum(batch_proportions) == B)
+        assert sum(batch_proportions) == B
         return batch_proportions

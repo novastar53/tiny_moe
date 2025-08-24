@@ -32,7 +32,10 @@ class Attention(nnx.Module):
             config.n_embed,
             config.n_embed,
             kernel_init=nnx.with_partitioning(
-                nnx.initializers.normal(stddev=0.02 * (2 * self.config.n_layer) ** -0.5), (None,)
+                nnx.initializers.normal(
+                    stddev=0.02 * (2 * self.config.n_layer) ** -0.5
+                ),
+                (None,),
             ),
             use_bias=False,
             dtype=config.dtype,
@@ -40,10 +43,12 @@ class Attention(nnx.Module):
         )
         self.rope_omega = nnx.Variable(
             calc_rope_omega_llama(
-                config.n_embed // config.n_head, config.block_size, config.rope_theta, config.dtype
+                config.n_embed // config.n_head,
+                config.block_size,
+                config.rope_theta,
+                config.dtype,
             ),
         )
-
 
     def __call__(self, x):
         B, T, C = x.shape
