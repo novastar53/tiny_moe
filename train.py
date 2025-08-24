@@ -127,7 +127,7 @@ class TrainerConfig:
   adam_b1: float = 0.9
   adam_b2: float = 0.95
   warmup_steps: int = max_steps // 100
-  print_interval: int = 1
+  print_interval: int = 100
   eval_interval: int = 5000
   checkpoint_interval: int = 10000
   grad_accumulation_steps: int = num_tokens_per_batch // (mB * T) # Number of steps over which to average the gradient
