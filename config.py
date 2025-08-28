@@ -21,7 +21,13 @@ class Config:
     init_stddev: float = 0.02
     expert_load_factor: float = 2.5
     aux_loss_coeff: float = 0.01
+    moe_bias: bool = False
+    mlp_bias: bool = False
+    attention_bias: bool = False
+    load_balance_loss_coeff: float = 1e-2
+    z_loss_coeff: float = 5e-4
     expert_top_k: int = 2
+    ln_epsilon: float = 1e-5
     rope_theta: float = 1e-4  # base frequency for rope
     expert_partition_spec: PartitionSpec = PartitionSpec(
         "devices",

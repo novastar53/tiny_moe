@@ -12,7 +12,6 @@ import jax.numpy as jnp
 import flax.nnx as nnx
 import orbax.checkpoint as ocp
 
-from modules.glu import GLU
 from modules.attn import Attention
 from modules.moe import MoE
 from modules.rope import calc_rope_omega_llama
@@ -20,65 +19,41 @@ from modules.rope import calc_rope_omega_llama
 from config import Config
 
 
-class GLU_Block(nnx.Module):
+class Block(nnx.Module):
     def __init__(self, config: Config, rngs: nnx.Rngs):
         self.config = config
         self.rms_n_1 = nnx.RMSNorm(
             config.n_embed,
+            epsilon=config.ln_epsilon,
             scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
             dtype=config.dtype,
             rngs=rngs,
         )
         self.rms_n_2 = nnx.RMSNorm(
             config.n_embed,
+            epsilon=config.ln_epsilon,
             scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
             dtype=config.dtype,
             rngs=rngs,
         )
-        self.attn = Attention(config, rngs)
-        self.glu = GLU(config, rngs)
-
-    def __call__(self, x):
-        x = x + self.attn(self.rms_n_1(x))
-        x = x + self.glu(self.rms_n_2(x))
-        return x
-
-
-class MOE_Block(nnx.Module):
-    def __init__(self, config: Config, rngs: nnx.Rngs):
-        self.config = config
-        self.rms_n_1 = nnx.RMSNorm(
-            config.n_embed,
-            scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
-            dtype=config.dtype,
-            rngs=rngs,
-        )
-        self.rms_n_2 = nnx.RMSNorm(
-            config.n_embed,
-            scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
-            dtype=config.dtype,
-            rngs=rngs,
-        )
-        self.aux_loss = False
+        self.load_balance_loss = False
+        self.z_loss = False
         self.attn = Attention(config, rngs)
         self.moe = MoE(config, rngs)
 
     def __call__(self, x):
         x = x + self.attn(self.rms_n_1(x))
-
-        if self.aux_loss:
-            moe_o, aux_loss = self.moe(self.rms_n_2(x))
-            x = x + moe_o
-            return x, aux_loss
-
-        x = x + self.moe(self.rms_n_2(x))
-        return x
+        o = self.moe(self.rms_n_2(x))
+        x = x + o["y"]
+        o["y"] = x
+        return o
 
 
 class Tiny_MoE(nnx.Module):
     def __init__(self, config: Config, rngs: nnx.Rngs):
         self.config = config
-        self.aux_loss = False
+        self.load_balance_loss = False
+        self.z_loss = False
         self.embedding = nnx.Embed(
             config.vocab_size,
             config.n_embed,
@@ -91,8 +66,7 @@ class Tiny_MoE(nnx.Module):
         self.h = []
         for _ in range(config.n_layer // 2):
             self.h += [
-                MOE_Block(config, rngs=rngs),
-                GLU_Block(config, rngs=rngs),
+                Block(config, rngs=rngs),
             ]
 
         self.rms_n_f = nnx.RMSNorm(
@@ -104,17 +78,17 @@ class Tiny_MoE(nnx.Module):
 
     def __call__(self, x):
         x = self.embedding(x)
-        total_aux_loss = 0
+        total_load_balance_loss = 0
+        total_z_loss = 0
         for i in range(0, self.config.n_layer, 2):
-            if self.aux_loss:
-                x, aux_loss = self.h[i](x)
-                total_aux_loss += aux_loss
-            else:
-                x = self.h[i](x)
-            x = self.h[i + 1](x)
+            out = self.h[i](x)
+            if self.load_balance_loss:
+                total_load_balance_loss += out["load_balance_loss"]
+            if self.z_loss:
+                total_z_loss += out["z_loss"]
         x = self.rms_n_f(x)
         logits = self.embedding.attend(x)
-        return logits, total_aux_loss
+        return logits, total_load_balance_loss, total_z_loss
 
 
 if __name__ == "__main__":

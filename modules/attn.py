@@ -14,6 +14,10 @@ class Attention(nnx.Module):
             kernel_init=nnx.with_partitioning(
                 nnx.initializers.normal(stddev=0.02), (None,)
             ),
+            bias_init=nnx.with_partitioning(
+                nnx.initializers.zeros,
+                (None,),
+            ),
             use_bias=False,
             dtype=config.dtype,
             rngs=rngs,
@@ -23,6 +27,10 @@ class Attention(nnx.Module):
             2 * config.n_kv_head * config.n_embed // config.n_head,
             kernel_init=nnx.with_partitioning(
                 nnx.initializers.normal(stddev=0.02), (None,)
+            ),
+            bias_init=nnx.with_partitioning(
+                nnx.initializers.zeros,
+                (None,),
             ),
             use_bias=False,
             dtype=config.dtype,
@@ -35,6 +43,10 @@ class Attention(nnx.Module):
                 nnx.initializers.normal(
                     stddev=0.02 * (2 * self.config.n_layer) ** -0.5
                 ),
+                (None,),
+            ),
+            bias_init=nnx.with_partitioning(
+                nnx.initializers.zeros,
                 (None,),
             ),
             use_bias=False,
