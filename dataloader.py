@@ -6,7 +6,6 @@ import jax.numpy as jnp
 import numpy as np
 
 import tiktoken
-from transformers import AutoTokenizer
 
 from logging_config import setup_logging
 
@@ -18,9 +17,8 @@ class Dataloader:
         self.batch_size = batch_size
         self.block_size = block_size
 
-        with open(Path().absolute() / "datasets" / "panchatantra-ryder-clean.txt") as f:
+        with open(Path().absolute() / "datasets" / "panchatantra-ryder" / "panchatantra-ryder-clean.txt") as f:
             text = f.read()
-            # tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M")
             tokenizer = tiktoken.get_encoding("gpt2")
             self.tokens = tokenizer.encode(text)
 
