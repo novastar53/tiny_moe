@@ -63,12 +63,7 @@ class Tiny_MoE(nnx.Module):
             dtype=config.dtype,
             rngs=rngs,
         )
-        self.h = []
-        for _ in range(config.n_layer // 2):
-            self.h += [
-                Block(config, rngs=rngs),
-            ]
-
+        self.h = [Block(config, rngs=rngs) for _ in range(config.n_layer)]
         self.rms_n_f = nnx.RMSNorm(
             config.n_embed,
             dtype=config.dtype,
@@ -80,8 +75,9 @@ class Tiny_MoE(nnx.Module):
         x = self.embedding(x)
         total_load_balance_loss = 0
         total_z_loss = 0
-        for i in range(0, self.config.n_layer, 2):
+        for i in range(self.config.n_layer):
             out = self.h[i](x)
+            x = out["y"]
             if self.load_balance_loss:
                 total_load_balance_loss += out["load_balance_loss"]
             if self.z_loss:
