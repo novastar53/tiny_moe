@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Callable, List
 from abc import ABC, abstractmethod
@@ -10,49 +11,6 @@ import tiktoken
 from logging_config import setup_logging
 
 logger = setup_logging()
-
-
-class Dataloader:
-    def __init__(self, batch_size, block_size):
-        self.batch_size = batch_size
-        self.block_size = block_size
-
-        with open(Path().absolute() / "datasets" / "panchatantra-ryder" / "panchatantra-ryder-clean.txt") as f:
-            text = f.read()
-            tokenizer = tiktoken.get_encoding("gpt2")
-            self.tokens = tokenizer.encode(text)
-
-        logger.info(f"Initialized dataloader with {len(self.tokens)} tokens")
-
-    def __call__(self):
-        tokens = self.tokens
-        B = self.batch_size
-        T = self.block_size
-        D = len(tokens)
-        num_sequences = (D - 1) // T
-        num_batches = num_sequences // B
-
-        for i in range(num_batches):
-            x = []
-            y = []
-            for j in range(B):
-                start_idx = (i * B + j) * T
-                end_idx = start_idx + T
-                x_seq = tokens[start_idx:end_idx]
-                y_seq = tokens[start_idx + 1 : end_idx + 1]
-                x.append(x_seq)
-                y.append(y_seq)
-            x = np.array(x)
-            y = np.array(y)
-            yield x, y
-
-
-if __name__ == "__main__":
-    dl = Dataloader(32, 128)
-    it = dl()
-    for x, y in it:
-        logger.info(f"Batch shapes - x: {x.shape}, y: {y.shape}")
-        assert x.shape == (32, 128)
 
 
 class BaseDataLoader(ABC):
@@ -147,6 +105,46 @@ start pos:      {start_shard_pos}
     def _load_shard(self) -> np.ndarray:
         """Load and return current shard as a 1D numpy array."""
         pass
+
+
+class DataLoader(BaseDataLoader):
+    def __init__(
+        self,
+        dirpath: str,
+        batch_size: int,
+        block_size: int,
+        device_rank: int,
+        label: str | None = None,
+        quiet: bool = False,
+        start_shard: int = 0,
+        start_shard_pos: int = 0,
+    ):
+        self.dirpath = dirpath
+        super().__init__(
+            batch_size,
+            block_size,
+            device_rank,
+            label,
+            quiet,
+            start_shard=start_shard,
+            start_shard_pos=start_shard_pos,
+        )
+
+    def _list_shards(self, label):
+        shards = os.listdir(self.dirpath)
+        if label is not None:
+            shards = [s for s in shards if label in s]
+        return shards
+
+    def _load_shard(self):
+        if self.cur_shard >= len(self.shards):
+            self.cur_shard = 0
+        shard = self.shards[self.cur_shard]
+        tokens = np.load(os.path.join(self.dirpath, shard))
+        if not isinstance(tokens, np.ndarray):
+            tokens = tokens["arr_0"]
+        self.shard_size = len(tokens)
+        return tokens
 
 
 class CloudDataLoader(BaseDataLoader):
