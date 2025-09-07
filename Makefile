@@ -11,9 +11,7 @@ uv:
 
 # Run uv sync
 cuda:
-	source $HOME/.local/bin/env
 	uv sync --extra dev --extra cuda
 
 cpu:
-	source $HOME/.local/bin/env
 	uv sync --extra dev --extra metal

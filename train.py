@@ -119,7 +119,7 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
     num_tokens: int = 10000 * int(111777) #int(236e9)
-    num_tokens_per_batch: int = 2**12  # 2**20 = 1.0 million
+    num_tokens_per_batch: int = 2**15  # 2**20 = 1.0 million
     mB: int = 32 * num_devices
     T: int = 128  # config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
@@ -186,7 +186,6 @@ assert trconf.mB * trconf.T == trconf.num_tokens_per_batch
 
 # Set up Dataloader
 
-'''
 train_dl = BlendedCloudDataLoader(
     device_rank=1,
     block_size=trconf.T,
@@ -200,14 +199,14 @@ train_dl = BlendedCloudDataLoader(
     proportions=[85, 1, 12],
     label="train",
 )
-'''
 
+'''
 train_dl = DataLoader(dirpath="datasets/panchatantra-ryder/processed",
                       batch_size=trconf.mB,
                       block_size=trconf.T,
                       device_rank=1,
                       label="train")
-
+'''
 # Train
 
 with mesh:
