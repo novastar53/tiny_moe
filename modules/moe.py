@@ -7,22 +7,33 @@ import flax.nnx as nnx
 class MoE(nnx.Module):
     def __init__(self, config, rngs: nnx.Rngs):
         self.config = config
-        self.add_noise = False
-        self.load_balance_loss = False
-        self.z_loss = False
-        self.gate_noise_rngstream = rngs.gate_noise
+        self.capacity = config.block_size // config.n_experts
 
-        self.router_gate = nnx.Linear(
-            config.n_embed,
-            config.n_experts,
-            kernel_init=nnx.with_partitioning(
+        ## Router Gate
+        w_router_gate_init = nnx.with_partitioning(
                 nnx.initializers.normal(stddev=0.02), (None,)
-            ),
-            bias_init=nnx.with_partitioning(nnx.initializers.zeros, sharding=(None,)),
-            dtype=config.dtype,
-            rngs=rngs,
+            )
+        b_router_gate_init = nnx.with_partitioning(
+                nnx.initializers.zeros, (None,)
+            )
+        
+        self.w_router_gate = nnx.Param(
+            w_router_gate_init(
+                rngs.default(),
+                (config.n_experts, self.capacity, config.n_embed),
+            )
         )
 
+        if config.mlp_bias:
+
+            self.b_router_gate = nnx.Param(
+                b_router_gate_init(
+                    rngs.default(),
+                    (config.n_experts, self.capacity),
+                )
+            )
+
+        ## Experts
         w_fc_init = nnx.with_partitioning(
             nnx.initializers.normal(stddev=0.02),
             sharding=self.config.expert_partition_spec,
@@ -50,125 +61,83 @@ class MoE(nnx.Module):
             )
         )
 
-        b_init = nnx.with_partitioning(
-            nnx.initializers.zeros, sharding=self.config.expert_partition_spec
-        )
+        if config.moe_bias:
 
-        self.b_proj = nnx.Param(
-            b_init(
-                rngs.default(),
-                (config.n_experts, 1, config.n_embed),
+            b_init = nnx.with_partitioning(
+                nnx.initializers.zeros, sharding=self.config.expert_partition_spec
             )
-        )
 
-        self.b_gate = nnx.Param(
-            b_init(
-                rngs.default(),
-                (config.n_experts, 1, config.n_glu_hidden),
+            self.b_proj = nnx.Param(
+                b_init(
+                    rngs.default(),
+                    (config.n_experts, 1, config.n_embed),
+                )
             )
-        )
 
-        self.b_fc = nnx.Param(
-            b_init(
-                rngs.default(),
-                (config.n_experts, 1, config.n_glu_hidden),
+            self.b_gate = nnx.Param(
+                b_init(
+                    rngs.default(),
+                    (config.n_experts, 1, config.n_glu_hidden),
+                )
             )
-        )
+
+            self.b_fc = nnx.Param(
+                b_init(
+                    rngs.default(),
+                    (config.n_experts, 1, config.n_glu_hidden),
+                )
+            )
 
     def _apply_experts(self, x):
-        (x, w_fc, w_gate, w_proj, b_fc, b_gate, b_proj) = dtypes.promote_dtype(
+        (x, w_fc, w_gate, w_proj) = dtypes.promote_dtype(
             (
                 x,
                 self.w_fc.value,
                 self.w_gate.value,
                 self.w_proj.value,
-                self.b_fc,
-                self.b_gate,
-                self.b_proj,
             ),
             dtype=self.config.dtype,
         )
+        if self.config.moe_bias:
+            (b_fc, b_gate, b_proj) = dtypes.promote_dtype(
+                (
+                    self.b_fc,
+                    self.b_gate,
+                    self.b_proj,
+                ),
+                dtype=self.config.dtype,
+            )
         x = jax.lax.with_sharding_constraint(x, self.config.expert_partition_spec)
-        g = jnp.einsum("enc,ech->enh", x, w_gate) + b_gate
-        h = jnp.einsum("enc,ech->enh", x, w_fc) + b_fc
+        g = jnp.einsum("enc,ech->enh", x, w_gate)
+        if self.config.moe_bias:
+            g += b_gate
+        h = jnp.einsum("enc,ech->enh", x, w_fc)
+        if self.config.moe_bias:
+            h += b_fc
         h = nnx.silu(g) * h
-        o = jnp.einsum("enh,ehc->enc", h, w_proj) + b_proj
+        o = jnp.einsum("enh,ehc->enc", h, w_proj)
+        if self.config.moe_bias:
+            h += b_proj
         o = jax.lax.with_sharding_constraint(o, self.config.expert_partition_spec)
         return o
 
-    def assign_per_batch_experts(self, x, gate_probs, expert_cap):
-        _, C = x.shape
-        top_k_probs, expert_indices = jax.lax.top_k(
-            gate_probs, self.config.expert_top_k
-        )  # T, K
-        expert_indices = expert_indices.swapaxes(0, 1).ravel()
-        expert_one_hot = jax.nn.one_hot(
-            expert_indices, self.config.n_experts, dtype=jnp.int32
-        )
-        expert_positions = jnp.cumsum(expert_one_hot, axis=0) * expert_one_hot
-        expert_positions = expert_positions.reshape(
-            self.config.expert_top_k, -1, self.config.n_experts
-        )
-        expert_positions = expert_positions.swapaxes(0, 1)
-        expert_positions = jnp.max(expert_positions, axis=-1) - 1
-        expert_indices = expert_indices.reshape(self.config.expert_top_k, -1).swapaxes(
-            0, 1
-        )
-
-        zeros = jnp.zeros((self.config.n_experts, expert_cap, C))
-        x = jnp.repeat(x, self.config.expert_top_k, axis=0)
-        expert_inputs = zeros.at[expert_indices.ravel(), expert_positions.ravel()].set(
-            x
-        )
-
-        return top_k_probs, expert_positions, expert_indices, expert_inputs
-
-    def _collect_outputs(
-        self, expert_outputs, expert_indices, expert_positions, top_k_probs
-    ):
-        expert_outputs = expert_outputs[expert_indices, expert_positions]
-        expert_outputs = jnp.sum(top_k_probs[..., None] * expert_outputs, axis=1)
-        return expert_outputs
+    def _dispatch(self, x, w):
+        x = jnp.einsum('td,tec->ecd', x, w)
+        return x
+    
+    def _collect(self, x, w):
+        x = jnp.einsum('ecd,tec->td', x, w)
+        return x
 
     def __call__(self, x):
         B, T, C = x.shape
-        output = {}
-        g = self.router_gate(x)
-        if self.z_loss:
-            z_loss = jnp.sum(jnp.square(jnp.log(jnp.sum(jnp.exp(g), axis=-1)))) / (
-                B * T
-            )
-            output["z_loss"] = z_loss
-        if self.add_noise:
-            noise = jax.random.uniform(
-                self.gate_noise_rngstream(),
-                g.shape,
-                self.config.dtype,
-                1 - 1e-2,
-                1 + 1e-2,
-            )
-            g *= noise
-        gate_probs = jax.nn.softmax(g)
-        expert_cap_per_batch = int(
-            self.config.expert_load_factor
-            * self.config.expert_top_k
-            * max(1, T / self.config.n_experts)
-        )
-        (top_k_probs, expert_positions, expert_indices, expert_inputs) = jax.vmap(
-            lambda x, p: self.assign_per_batch_experts(x, p, expert_cap_per_batch)
-        )(
-            x, gate_probs
-        )  # B, n_experts, expert_cap, C
-
-        top_k_probs = jax.lax.with_sharding_constraint(
-            top_k_probs, self.config.expert_partition_spec
-        )
-        expert_positions = jax.lax.with_sharding_constraint(
-            expert_positions, self.config.expert_partition_spec
-        )
-        expert_indices = jax.lax.with_sharding_constraint(
-            expert_indices, self.config.expert_partition_spec
-        )
+        g = jnp.einsum('btd,ecd->btec', x, self.w_router_gate) # B, T, E, capacity
+        if self.config.mlp_bias:
+            g += self.b_router_gate
+        dispatch_weights = jax.nn.softmax(g, axis=1)
+        collect_weights = jax.nn.softmax(g, axis=(2,3))
+        
+        expert_inputs = jax.vmap(lambda x, w: self._dispatch(x, w))(x, dispatch_weights)
         expert_inputs = jax.lax.with_sharding_constraint(
             expert_inputs, self.config.expert_partition_spec
         )  # B, n_experts, expert_cap, C
@@ -178,7 +147,7 @@ class MoE(nnx.Module):
                 self.config.n_experts,
                 -1,
                 self.config.n_experts,
-                expert_cap_per_batch,
+                self.capacity,
                 C,
             )  # n_experts, batch_per_expert, n_experts, expert_cap, C
             expert_inputs = jnp.swapaxes(
@@ -194,7 +163,7 @@ class MoE(nnx.Module):
             expert_inputs, self.config.expert_partition_spec
         )
         expert_inputs = expert_inputs.reshape(
-            self.config.n_experts, B * expert_cap_per_batch, C
+            self.config.n_experts, B * self.capacity, C
         )  # n_experts, B * expert_cap, C
 
         expert_outputs = self._apply_experts(expert_inputs)
@@ -204,18 +173,18 @@ class MoE(nnx.Module):
                 self.config.n_experts,
                 -1,
                 self.config.n_experts,
-                expert_cap_per_batch,
+                self.capacity,
                 C,
             )  # n_experts, batch_per_expert, n_experts, expert_cap, C
             expert_outputs = jnp.swapaxes(
                 expert_outputs, 0, 2
             )  # n_experts, batch_per_expert, n_experts, expert_cap, C
             expert_outputs = expert_outputs.reshape(
-                B, self.config.n_experts, expert_cap_per_batch, C
+                B, self.config.n_experts, self.capacity, C
             )  # B, n_experts, expert_cap, C
         else:
             expert_outputs = expert_outputs.reshape(
-                self.config.n_experts, B, expert_cap_per_batch, C
+                self.config.n_experts, B, self.capacity, C
             )  # n_experts, B, expert_cap, C
             expert_outputs = jnp.swapaxes(
                 expert_outputs, 0, 1
@@ -225,24 +194,12 @@ class MoE(nnx.Module):
             expert_outputs, self.config.expert_partition_spec
         )
 
-        y = jax.vmap(lambda eo, ei, ep, topk: self._collect_outputs(eo, ei, ep, topk))(
-            expert_outputs, expert_indices, expert_positions, top_k_probs
+        y = jax.vmap(lambda eo, w: self._collect(eo,w))(
+            expert_outputs, collect_weights
         )
 
         y = jax.lax.with_sharding_constraint(y, self.config.expert_partition_spec)
-        output["y"] = y
-
-        if self.load_balance_loss is True:
-            frac_tokens = jnp.bincount(
-                expert_indices.flatten(), length=self.config.n_experts
-            ) / (2 * B * T)
-            frac_router_probs = jnp.sum(gate_probs, axis=(0, 1)) / (B * T)
-            load_balance_loss = (
-                jnp.sum(frac_tokens * frac_router_probs) * self.config.n_experts
-            )
-            output["load_balance_loss"] = load_balance_loss
-
-        return output
+        return y 
 
 
 if __name__ == "__main__":
@@ -264,7 +221,6 @@ if __name__ == "__main__":
     with mesh:
         x = nnx.with_sharding_constraint(x, sharding)
         moe = MoE(config, rngs)
-        moe.add_noise = True
         state = nnx.state(moe)
         pspecs = nnx.get_partition_spec(state)
         sharded_state = nnx.with_sharding_constraint(state, pspecs)

@@ -163,20 +163,15 @@ def count_params(m: nnx.Module, layer_type: str | None = None) -> int:
 
 
 def loss_fn(model, x, y):
-    logits, load_balance_loss, z_loss = model(x)
-    logits_loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
-    loss = (
-        logits_loss
-        + model.config.aux_loss_coeff * load_balance_loss
-        + model.config.z_loss_coeff * z_loss
-    )
-    return loss, (logits_loss, load_balance_loss, z_loss)
+    logits = model(x)
+    loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
+    return loss
 
 
 @nnx.jit
 def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
-    (loss, (logits_loss, load_balance_loss, z_loss)), grads = nnx.value_and_grad(
-        loss_fn, has_aux=True
+    loss, grads = nnx.value_and_grad(
+        loss_fn, has_aux=False
     )(model, x, y)
     optimizer.update(model, grads)
-    return loss, logits_loss, load_balance_loss, z_loss
+    return loss

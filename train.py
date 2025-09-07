@@ -26,7 +26,7 @@ import optax
 
 from logging_config import setup_logging
 from tiny_moe import Config
-from dataloader import BlendedCloudDataLoader
+from dataloader import Dataloader, BlendedCloudDataLoader
 from utils import (
     generate_readable_code,
     count_params,
@@ -88,8 +88,8 @@ rngs = nnx.Rngs(default=jax.random.key(1337), gate_noise=jax.random.key(42))
 config = Config(
     name="Tiny_MoE_2",
     dtype=jnp.bfloat16,
-    vocab_size=49152,
-    n_layer=30,
+    vocab_size=50304, #49152,
+    n_layer=2,
     block_size=2048,
     n_head=12,
     n_kv_head=4,
@@ -98,9 +98,6 @@ config = Config(
     moe_bias=False,
     mlp_bias=False,
     attention_bias=False,
-    load_balance_loss_coeff=1e-2,
-    z_loss_coeff=5e-4,
-    expert_load_factor=1.25,
     ln_epsilon=1e-5,
     sdpa_implementation="cudnn" if device == "gpu" else "xla",
 )
@@ -122,7 +119,7 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
     num_tokens: int = int(236e9)
-    num_tokens_per_batch: int = 2**15  # 2**20 = 1.0 million
+    num_tokens_per_batch: int = 2**12  # 2**20 = 1.0 million
     mB: int = 32 * num_devices
     T: int = 128  # config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
@@ -189,6 +186,7 @@ assert trconf.mB * trconf.T == trconf.num_tokens_per_batch
 
 # Set up Dataloader
 
+'''
 train_dl = BlendedCloudDataLoader(
     device_rank=1,
     block_size=trconf.T,
@@ -202,6 +200,9 @@ train_dl = BlendedCloudDataLoader(
     proportions=[85, 1, 12],
     label="train",
 )
+'''
+
+train_dl = Dataloader(trconf.mB, trconf.T)
 
 # Train
 
@@ -213,8 +214,6 @@ with mesh:
             "step",
             "lr",
             "loss",
-            "load_balance_loss",
-            "z_loss",
             "time",
             "tokens_processed",
             "tokens_per_sec",
@@ -228,14 +227,14 @@ with mesh:
             "devices",
         ),
     )
-    m.train(add_noise=False, load_balance_loss=True, z_loss=True)
+    m.train()
     try:
         while optimizer.step.value.item() < trconf.max_steps:
             step = optimizer.step.value.item()
             batch, target = train_dl()
             batch = jax.device_put(batch.squeeze(), data_sharding)
             target = jax.device_put(target.squeeze(), data_sharding)
-            avg_loss, logits_loss, load_balance_loss, z_loss = step_fn(
+            avg_loss = step_fn(
                 m, optimizer, batch, target
             )
             if step % trconf.print_interval == 0:
@@ -253,9 +252,6 @@ with mesh:
                 tokens_processed = (step + 1) * trconf.mB * trconf.T
                 lr = inverse_sqrt_schedule(step)
                 avg_loss = avg_loss.item()
-                logits_loss = logits_loss.item()
-                load_balance_loss = load_balance_loss.item()
-                z_loss = z_loss.item()
 
                 train_losses.append((step, avg_loss))
                 append_to_csv(
@@ -264,8 +260,6 @@ with mesh:
                         step,
                         lr,
                         avg_loss,
-                        load_balance_loss,
-                        z_loss,
                         iter_time * 1000,
                         tokens_processed,
                         tokens_per_sec,
@@ -274,9 +268,6 @@ with mesh:
                 train_logger.info(
                     f"{step} | lr: {lr:0.4f} | "
                     f"loss: {avg_loss:0.4f} | "
-                    f"logits loss: {logits_loss:0.4f} | "
-                    f"load balance loss: {load_balance_loss:0.4f} | "
-                    f"z loss: {z_loss:0.4f} | "
                     f"avg iter time: {iter_time*1000:0.2f}ms | "
                     f"avg tok/sec: {tokens_per_sec:,.2f} | "
                     f"tokens processed: {tokens_processed:,}"

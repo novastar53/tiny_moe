@@ -36,24 +36,18 @@ class Block(nnx.Module):
             dtype=config.dtype,
             rngs=rngs,
         )
-        self.load_balance_loss = False
-        self.z_loss = False
         self.attn = Attention(config, rngs)
         self.moe = MoE(config, rngs)
 
     def __call__(self, x):
         x = x + self.attn(self.rms_n_1(x))
-        o = self.moe(self.rms_n_2(x))
-        x = x + o["y"]
-        o["y"] = x
-        return o
+        x = x + self.moe(self.rms_n_2(x))
+        return x
 
 
 class Tiny_MoE(nnx.Module):
     def __init__(self, config: Config, rngs: nnx.Rngs):
         self.config = config
-        self.load_balance_loss = False
-        self.z_loss = False
         self.embedding = nnx.Embed(
             config.vocab_size,
             config.n_embed,
@@ -73,18 +67,11 @@ class Tiny_MoE(nnx.Module):
 
     def __call__(self, x):
         x = self.embedding(x)
-        total_load_balance_loss = 0
-        total_z_loss = 0
         for i in range(self.config.n_layer):
-            out = self.h[i](x)
-            x = out["y"]
-            if self.load_balance_loss:
-                total_load_balance_loss += out["load_balance_loss"]
-            if self.z_loss:
-                total_z_loss += out["z_loss"]
+            x = self.h[i](x)
         x = self.rms_n_f(x)
         logits = self.embedding.attend(x)
-        return logits, total_load_balance_loss, total_z_loss
+        return logits
 
 
 if __name__ == "__main__":
@@ -107,5 +94,5 @@ if __name__ == "__main__":
         pspecs = nnx.get_partition_spec(state)
         sharded_state = nnx.with_sharding_constraint(state, pspecs)
         nnx.update(m, sharded_state)
-        y = m(x)[0]
+        y = m(x)
         assert y.shape == (B, config.block_size, config.vocab_size)
