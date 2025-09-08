@@ -13,13 +13,37 @@ import flax.nnx as nnx
 import orbax.checkpoint as ocp
 
 from modules.attn import Attention
+from modules.glu import GLU
 from modules.moe import MoE
 from modules.rope import calc_rope_omega_llama
 
 from config import Config
 
+class GLU_Block(nnx.Module):
+    def __init__(self, config: Config, rngs: nnx.Rngs):
+        self.config = config
+        self.rms_n_1 = nnx.RMSNorm(
+            config.n_embed,
+            scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
+            dtype=config.dtype,
+            rngs=rngs,
+        )
+        self.rms_n_2 = nnx.RMSNorm(
+            config.n_embed,
+            scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
+            dtype=config.dtype,
+            rngs=rngs,
+        )
+        self.attn = Attention(config, rngs)
+        self.glu = GLU(config, rngs)
 
-class Block(nnx.Module):
+    def __call__(self, x):
+        x = x + self.attn(self.rms_n_1(x))
+        x = x + self.glu(self.rms_n_2(x))
+        return x
+
+
+class MoE_Block(nnx.Module):
     def __init__(self, config: Config, rngs: nnx.Rngs):
         self.config = config
         self.rms_n_1 = nnx.RMSNorm(
@@ -57,7 +81,12 @@ class Tiny_MoE(nnx.Module):
             dtype=config.dtype,
             rngs=rngs,
         )
-        self.h = [Block(config, rngs=rngs) for _ in range(config.n_layer)]
+        self.h = []
+        for _ in range(config.n_layer // 2):
+            self.h += [
+                MoE_Block(config, rngs),
+                GLU_Block(config, rngs),
+            ]
         self.rms_n_f = nnx.RMSNorm(
             config.n_embed,
             dtype=config.dtype,

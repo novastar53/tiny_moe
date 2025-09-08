@@ -15,6 +15,7 @@ class GLU(nnx.Module):
                 nnx.initializers.zeros,
                 (None,),
             ),
+            use_bias=config.mlp_bias,
             dtype=config.dtype,
             rngs=rngs,
         )
@@ -28,6 +29,7 @@ class GLU(nnx.Module):
                 nnx.initializers.zeros,
                 (None,),
             ),
+            use_bias=config.mlp_bias,
             dtype=config.dtype,
             rngs=rngs,
         )
@@ -42,6 +44,7 @@ class GLU(nnx.Module):
                 nnx.initializers.zeros,
                 (None,),
             ),
+            use_bias=config.mlp_bias,
             dtype=config.dtype,
             rngs=rngs,
         )

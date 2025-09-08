@@ -107,7 +107,7 @@ class MoE(nnx.Module):
                 ),
                 dtype=self.config.dtype,
             )
-        x = jax.lax.with_sharding_constraint(x, self.config.expert_partition_spec)
+        x = nnx.with_sharding_constraint(x, self.config.expert_partition_spec)
         g = jnp.einsum("enc,ech->enh", x, w_gate)
         if self.config.moe_bias:
             g += b_gate
@@ -117,8 +117,8 @@ class MoE(nnx.Module):
         h = nnx.silu(g) * h
         o = jnp.einsum("enh,ehc->enc", h, w_proj)
         if self.config.moe_bias:
-            h += b_proj
-        o = jax.lax.with_sharding_constraint(o, self.config.expert_partition_spec)
+            o += b_proj
+        o = nnx.with_sharding_constraint(o, self.config.expert_partition_spec)
         return o
 
     def _dispatch(self, x, w):
@@ -131,14 +131,24 @@ class MoE(nnx.Module):
 
     def __call__(self, x):
         B, T, C = x.shape
-        g = jnp.einsum('btd,ecd->btec', x, self.w_router_gate) # B, T, E, capacity
+        (x, w_gate) = dtypes.promote_dtype(
+            (x, self.w_router_gate,), dtype=self.config.dtype
+        )
         if self.config.mlp_bias:
-            g += self.b_router_gate
+            (b_gate,) = dtypes.promote_dtype(
+            (self.b_router_gate,), dtype=self.config.dtype
+        )
+ 
+        g = jnp.einsum('btd,ecd->btec', x, w_gate) # B, T, E, capacity
+        if self.config.mlp_bias:
+            g += b_gate
         dispatch_weights = jax.nn.softmax(g, axis=1)
-        collect_weights = jax.nn.softmax(g, axis=(2,3))
+        dispatch_weights = nnx.with_sharding_constraint(dispatch_weights, self.config.expert_partition_spec)
+        combine_weights = jax.nn.softmax(g, axis=(2,3))
+        combine_weights = nnx.with_sharding_constraint(combine_weights, self.config.expert_partition_spec)
         
         expert_inputs = jax.vmap(lambda x, w: self._dispatch(x, w))(x, dispatch_weights)
-        expert_inputs = jax.lax.with_sharding_constraint(
+        expert_inputs = nnx.with_sharding_constraint(
             expert_inputs, self.config.expert_partition_spec
         )  # B, n_experts, expert_cap, C
 
@@ -159,7 +169,7 @@ class MoE(nnx.Module):
             )  # n_experts, B, expert_cap, C
 
         expert_inputs = expert_inputs.reshape(-1, C)  # n_experts * B * expert_cap, C
-        expert_inputs = jax.lax.with_sharding_constraint(
+        expert_inputs = nnx.with_sharding_constraint(
             expert_inputs, self.config.expert_partition_spec
         )
         expert_inputs = expert_inputs.reshape(
@@ -190,15 +200,15 @@ class MoE(nnx.Module):
                 expert_outputs, 0, 1
             )  # B, n_experts, expert_cap, C
 
-        expert_outputs = jax.lax.with_sharding_constraint(
+        expert_outputs = nnx.with_sharding_constraint(
             expert_outputs, self.config.expert_partition_spec
         )
 
         y = jax.vmap(lambda eo, w: self._collect(eo,w))(
-            expert_outputs, collect_weights
+            expert_outputs, combine_weights
         )
 
-        y = jax.lax.with_sharding_constraint(y, self.config.expert_partition_spec)
+        y = nnx.with_sharding_constraint(y, self.config.expert_partition_spec)
         return y 
 
 

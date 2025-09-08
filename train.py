@@ -91,10 +91,10 @@ config = Config(
     vocab_size=50304, #49152,
     n_layer=2,
     block_size=2048,
-    n_head=12,
-    n_kv_head=4,
-    n_embed=672,
-    n_glu_hidden=2048,
+    n_head=9,
+    n_kv_head=3,
+    n_embed=576,
+    n_glu_hidden=1536,
     moe_bias=False,
     mlp_bias=False,
     attention_bias=False,
@@ -119,8 +119,8 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
     num_tokens: int = 10000 * int(111777) #int(236e9)
-    num_tokens_per_batch: int = 2**15  # 2**20 = 1.0 million
-    mB: int = 32 * num_devices
+    num_tokens_per_batch: int = 2**8  # 2**20 = 1.0 million
+    mB: int = 2 * num_devices
     T: int = 128  # config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
     max_lr: float = 1e-3
@@ -141,6 +141,16 @@ class TrainerConfig:
 trconf = TrainerConfig()
 
 
+# Set up the optimizer
+def trapezoidal_schedule(step):
+
+    warmup_lr = trconf.max_lr * (step + 1) / trconf.warmup_steps
+    cooldown_lr = trconf.max_lr * (trconf.max_steps - step - 1) / (0.2 * trconf.max_steps)
+
+    return jnp.where(step < trconf.warmup_steps,
+                     warmup_lr,
+                     jnp.where(step < 0.8 * trconf.max_steps, trconf.max_lr, cooldown_lr))
+
 # Set up optimizer
 def inverse_sqrt_schedule(step):
     warmup_lr = trconf.max_lr * (step + 1) / trconf.warmup_steps
@@ -158,7 +168,7 @@ weight_decay_mask = jax.tree.map(
 tx = optax.chain(
     optax.clip_by_global_norm(trconf.max_grad_norm),
     optax.adamw(
-        inverse_sqrt_schedule,
+        trapezoidal_schedule,
         b1=trconf.adam_b1,
         b2=trconf.adam_b2,
         weight_decay=trconf.weight_decay,
@@ -185,7 +195,7 @@ train_logger.info(f"Effective batch size per device: {trconf.mB // num_devices}"
 assert trconf.mB * trconf.T == trconf.num_tokens_per_batch
 
 # Set up Dataloader
-
+'''
 train_dl = BlendedCloudDataLoader(
     device_rank=1,
     block_size=trconf.T,
@@ -199,14 +209,13 @@ train_dl = BlendedCloudDataLoader(
     proportions=[85, 1, 12],
     label="train",
 )
-
 '''
+
 train_dl = DataLoader(dirpath="datasets/panchatantra-ryder/processed",
                       batch_size=trconf.mB,
                       block_size=trconf.T,
                       device_rank=1,
                       label="train")
-'''
 # Train
 
 with mesh:
