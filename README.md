@@ -77,6 +77,12 @@ Example training command:
 python train.py
 ```
 
+### Results 
+
+Results from training on FineWeb-Edu.
+
+![tiny-moe-train-plot](tiny_moe_train_plot.png)
+
 ## Dataset
 
 The repository includes a sample dataset (Panchatantra stories) for testing and demonstration purposes. You can replace it with your own dataset by following the format in `dataloader.py`.
