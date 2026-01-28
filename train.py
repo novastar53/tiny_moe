@@ -5,7 +5,7 @@
 
 import os
 
-# os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./alpha-448101-282bc1b884cd.json"
 
 import time
@@ -26,7 +26,7 @@ import optax
 
 from logging_config import setup_logging
 from tiny_moe import Config
-from dataloader import BlendedCloudDataLoader
+from dataloader import BlendedCloudDataLoader, DataLoader
 from utils import (
     generate_readable_code,
     count_params,
@@ -89,7 +89,7 @@ config = Config(
     name="Tiny_MoE_2",
     dtype=jnp.bfloat16,
     vocab_size=49152,
-    n_layer=30,
+    n_layer=2,
     block_size=2048,
     n_head=12,
     n_kv_head=4,
@@ -189,19 +189,26 @@ assert trconf.mB * trconf.T == trconf.num_tokens_per_batch
 
 # Set up Dataloader
 
-train_dl = BlendedCloudDataLoader(
-    device_rank=1,
-    block_size=trconf.T,
-    batch_size=trconf.mB,
-    bucket_names=["jaxpt_datasets", "jaxpt_datasets", "jaxpt_datasets"],
-    bucket_prefixes=[
-        "smollm-corpus/processed/fineweb-edu-dedup",
-        "smollm-corpus/processed/python-edu",
-        "smollm-corpus/processed/cosmopedia-v2",
-    ],
-    proportions=[85, 1, 12],
-    label="train",
-)
+#train_dl = BlendedCloudDataLoader(
+#    device_rank=1,
+#    block_size=trconf.T,
+#    batch_size=trconf.mB,
+#    bucket_names=["jaxpt_datasets", "jaxpt_datasets", "jaxpt_datasets"],
+#    bucket_prefixes=[
+#        "smollm-corpus/processed/fineweb-edu-dedup",
+#        "smollm-corpus/processed/python-edu",
+#        "smollm-corpus/processed/cosmopedia-v2",
+#    ],
+#    proportions=[85, 1, 12],
+#    label="train",
+#)
+
+
+train_dl = DataLoader(dirpath="datasets/panchatantra-ryder/processed",
+                      batch_size=trconf.mB,
+                      block_size=trconf.T,
+                      device_rank=1,
+                      label="train")
 
 # Train
 
