@@ -109,3 +109,4 @@ if __name__ == "__main__":
         nnx.update(m, sharded_state)
         y = m(x)[0]
         assert y.shape == (B, config.block_size, config.vocab_size)
+        assert 0 == jnp.count_nonzero(jnp.isnan(y))
