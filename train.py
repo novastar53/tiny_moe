@@ -93,12 +93,12 @@ config = Config(
     name="Tiny_MoE_2",
     dtype=jnp.bfloat16,
     vocab_size=50304, #49152,
-    n_layer=2,
+    n_layer=30,
     block_size=1024, #2048,
     n_head=12,
     n_kv_head=4,
     n_embed=672,
-    n_glu_hidden=128, #2048,
+    n_glu_hidden=1024, #2048,
     moe_bias=False,
     mlp_bias=False,
     attention_bias=False,
@@ -125,7 +125,7 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 
 @dataclass
 class TrainerConfig:
-    num_tokens: int = 100 * 111777 #int(236e9)
+    num_tokens: int = 1000 * 111777 #int(236e9)
     num_tokens_per_batch: int = 2**13 # 2**15  # 2**20 = 1.0 million
     mB: int = 8 * num_devices
     T: int = config.block_size
