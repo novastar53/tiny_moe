@@ -37,6 +37,10 @@ from utils import (
     append_to_csv,
 )
 
+
+print(f"Jax Version: {jax.__version__}")
+print(f"Flax Version: {flax.__version__}")
+
 # Set up logging
 output_dir = Path("training_runs").absolute()
 timestamp = datetime.now().strftime("%Y%m%d")
@@ -90,7 +94,7 @@ config = Config(
     dtype=jnp.bfloat16,
     vocab_size=50304, #49152,
     n_layer=2,
-    block_size=128, #2048,
+    block_size=1024, #2048,
     n_head=12,
     n_kv_head=4,
     n_embed=672,
@@ -121,10 +125,10 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 
 @dataclass
 class TrainerConfig:
-    num_tokens: int = 10 * 111777 #int(236e9)
-    num_tokens_per_batch: int = 2**10 # 2**15  # 2**20 = 1.0 million
+    num_tokens: int = 100 * 111777 #int(236e9)
+    num_tokens_per_batch: int = 2**13 # 2**15  # 2**20 = 1.0 million
     mB: int = 8 * num_devices
-    T: int = 128  # config.block_size
+    T: int = config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
     max_lr: float = 1e-3
     min_lr: float = max_lr * 0.1

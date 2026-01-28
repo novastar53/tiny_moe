@@ -21,11 +21,11 @@ dev = [
 ]
 
 cuda = [
-    "jax[cuda12]>=0.7.0",
+    "jax[cuda12]==0.7.1",
 ]
 
 metal = [
-    "jax>=0.7.0",
+    "jax==0.7.1",
 ]
 
 [tool.black]
