@@ -29,7 +29,7 @@ class MoE(nnx.Module):
         )
 
         w_proj_init = nnx.with_partitioning(
-            nnx.initializers.normal(stddev=0.02 * (2 * config.n_layer) ** -0.5),
+            nnx.initializers.zeros,
             sharding=self.config.expert_partition_spec,
         )
 

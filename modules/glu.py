@@ -35,7 +35,7 @@ class GLU(nnx.Module):
             config.n_glu_hidden,
             config.n_embed,
             kernel_init=nnx.with_partitioning(
-                nnx.initializers.normal(stddev=0.02 * (2 * config.n_layer) ** -0.5),
+                nnx.initializers.zeros,
                 (None,),
             ),
             bias_init=nnx.with_partitioning(

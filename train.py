@@ -194,21 +194,6 @@ assert trconf.mB * trconf.T == trconf.num_tokens_per_batch
 
 # Set up Dataloader
 
-#train_dl = BlendedCloudDataLoader(
-#    device_rank=1,
-#    block_size=trconf.T,
-#    batch_size=trconf.mB,
-#    bucket_names=["jaxpt_datasets", "jaxpt_datasets", "jaxpt_datasets"],
-#    bucket_prefixes=[
-#        "smollm-corpus/processed/fineweb-edu-dedup",
-#        "smollm-corpus/processed/python-edu",
-#        "smollm-corpus/processed/cosmopedia-v2",
-#    ],
-#    proportions=[85, 1, 12],
-#    label="train",
-#)
-
-
 #train_dl = DataLoader(dirpath="datasets/panchatantra-ryder/processed",
 #                      batch_size=trconf.mB,
 #                      block_size=trconf.T,
