@@ -26,7 +26,7 @@ import optax
 
 from logging_config import setup_logging
 from tiny_moe import Config
-from dataloader import BlendedCloudDataLoader, DataLoader
+from dataloader import BlendedCloudDataLoader, DataLoader, HuggingfaceDataLoader
 from utils import (
     generate_readable_code,
     count_params,
@@ -35,6 +35,7 @@ from utils import (
     save_optimizer_state,
     step_fn,
     append_to_csv,
+    run_validation,
 )
 
 
@@ -93,8 +94,8 @@ config = Config(
     name="Tiny_MoE_2",
     dtype=jnp.bfloat16,
     vocab_size=50304, #49152,
-    n_layer=30,
-    block_size=1024, #2048,
+    n_layer=4,
+    block_size=128, #2048,
     n_head=12,
     n_kv_head=4,
     n_embed=672,
@@ -126,7 +127,7 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
     num_tokens: int = 1000 * 111777 #int(236e9)
-    num_tokens_per_batch: int = 2**13 # 2**15  # 2**20 = 1.0 million
+    num_tokens_per_batch: int = 2**10 # 2**15  # 2**20 = 1.0 million
     mB: int = 8 * num_devices
     T: int = config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
@@ -138,8 +139,9 @@ class TrainerConfig:
     adam_b2: float = 0.95
     warmup_steps: int = max_steps // 100
     print_interval: int = 100
-    eval: bool = False
-    eval_interval: int = 5000
+    val: bool = False
+    val_interval: int = 5000
+    val_batches: int = 50  # Number of batches to use for validation
     checkpoint_model: bool = False
     checkpoint_optimizer: bool = False
     checkpoint_interval: int = 10000
@@ -208,11 +210,25 @@ assert trconf.mB * trconf.T == trconf.num_tokens_per_batch
 #)
 
 
-train_dl = DataLoader(dirpath="datasets/panchatantra-ryder/processed",
-                      batch_size=trconf.mB,
-                      block_size=trconf.T,
-                      device_rank=1,
-                      label="train")
+#train_dl = DataLoader(dirpath="datasets/panchatantra-ryder/processed",
+#                      batch_size=trconf.mB,
+#                      block_size=trconf.T,
+#                      device_rank=1,
+#                      label="train")
+
+
+train_dl = HuggingfaceDataLoader(dirpath="datasets/fineweb-edu/fineweb100B",
+                                 batch_size=trconf.mB,
+                                 block_size=trconf.T,
+                                 device_rank=1,
+                                 label="train")
+
+val_dl = HuggingfaceDataLoader(dirpath="datasets/fineweb-edu/fineweb100B",
+                               batch_size=trconf.mB,
+                               block_size=trconf.T,
+                               device_rank=1,
+                               label="val",
+                               quiet=True)
 
 # Train
 
@@ -231,6 +247,11 @@ with mesh:
             "tokens_per_sec",
         ],
     )
+    if trconf.val:
+        append_to_csv(
+            log_dir / f"{run_name}_val.csv",
+            ["step", "loss", "logits_loss"],
+        )
     train_logger.info(f"Starting from step: {optimizer.step.value.item()}")
     start = False
     data_sharding = NamedSharding(
@@ -293,8 +314,19 @@ with mesh:
                     f"tokens processed: {tokens_processed:,}"
                 )
                 start = time.time()
-            if trconf.eval and step > 0 and step % trconf.eval_interval == 0:
-                train_logger.info("Evaluation TBD")
+            if trconf.val and step > 0 and step % trconf.val_interval == 0:
+                train_logger.info(f"Running validation at step {step}...")
+                val_loss, val_logits_loss = run_validation(
+                    m, val_dl, data_sharding, num_batches=trconf.val_batches
+                )
+                train_logger.info(
+                    f"Validation | step: {step} | loss: {val_loss:.4f} | "
+                    f"logits loss: {val_logits_loss:.4f}"
+                )
+                append_to_csv(
+                    log_dir / f"{run_name}_val.csv",
+                    [step, val_loss, val_logits_loss],
+                )
             if (
                 trconf.checkpoint_model
                 and step > 0

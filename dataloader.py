@@ -1,5 +1,5 @@
-import os 
-
+import os
+from pathlib import Path
 from typing import List
 from abc import ABC, abstractmethod
 
@@ -11,6 +11,10 @@ import tiktoken
 from logging_config import setup_logging
 
 logger = setup_logging()
+
+# Magic number for modded-nanogpt .bin format
+BIN_MAGIC_NUMBER = 20240520
+BIN_HEADER_SIZE = 256  # 256 int32 values = 1024 bytes
 
 
 class BaseDataLoader(ABC):
@@ -144,9 +148,15 @@ class DataLoader(BaseDataLoader):
         if self.cur_shard >= len(self.shards):
             self.cur_shard = 0
         shard = self.shards[self.cur_shard]
-        tokens = np.load(os.path.join(self.dirpath, shard))
-        if not isinstance(tokens, np.ndarray):
-            tokens = tokens["arr_0"]
+        shard_path = os.path.join(self.dirpath, shard)
+
+        if shard.endswith(".bin"):
+            tokens = load_bin_shard(shard_path)
+        else:
+            tokens = np.load(shard_path)
+            if not isinstance(tokens, np.ndarray):
+                tokens = tokens["arr_0"]
+
         self.shard_size = len(tokens)
         return tokens
 
@@ -196,9 +206,21 @@ class CloudDataLoader(BaseDataLoader):
         shard_name = self.shards[self.cur_shard]
         blob = self.bucket.blob(shard_name)
         data = blob.download_as_bytes()
-        tokens = np.load(BytesIO(data))
-        if not isinstance(tokens, np.ndarray):
-            tokens = tokens["arr_0"]
+
+        if shard_name.endswith(".bin"):
+            # Parse modded-nanogpt .bin format from bytes
+            header = np.frombuffer(data[: BIN_HEADER_SIZE * 4], dtype=np.int32)
+            assert header[0] == BIN_MAGIC_NUMBER, f"Invalid magic number: {header[0]}"
+            num_tokens = int(header[2])
+            tokens = np.frombuffer(
+                data[BIN_HEADER_SIZE * 4 : BIN_HEADER_SIZE * 4 + num_tokens * 2],
+                dtype=np.uint16,
+            )
+        else:
+            tokens = np.load(BytesIO(data))
+            if not isinstance(tokens, np.ndarray):
+                tokens = tokens["arr_0"]
+
         self.shard_size = len(tokens)
         return tokens
 
@@ -272,3 +294,114 @@ class BlendedCloudDataLoader:
                 diff -= 1
         assert sum(batch_proportions) == B
         return batch_proportions
+
+
+def load_bin_shard(filepath: str | Path) -> np.ndarray:
+    """
+    Load a modded-nanogpt .bin shard file.
+
+    Format: 256 int32 header (1024 bytes) followed by uint16 tokens.
+    Header[0] = magic number (20240520), Header[2] = num_tokens.
+    """
+    filepath = Path(filepath)
+    with open(filepath, "rb") as f:
+        header = np.frombuffer(f.read(BIN_HEADER_SIZE * 4), dtype=np.int32)
+        assert header[0] == BIN_MAGIC_NUMBER, f"Invalid magic number: {header[0]}"
+        num_tokens = int(header[2])
+        tokens = np.frombuffer(f.read(num_tokens * 2), dtype=np.uint16)
+    return tokens
+
+
+class HuggingfaceDataLoader(BaseDataLoader):
+    """
+    DataLoader for Huggingface hosted datasets
+    """
+
+    def __init__(
+        self,
+        dirpath: str,
+        batch_size: int,
+        block_size: int,
+        device_rank: int,
+        label: str | None = None,
+        quiet: bool = False,
+        start_shard: int = 0,
+        start_shard_pos: int = 0,
+        hf_repo: str = "kjj0/fineweb100B-gpt2",
+        num_train_shards: int | None = None,
+        download: bool = True,
+    ):
+        """
+        Args:
+            dirpath: Local directory for .bin files
+            batch_size: Batch size
+            block_size: Sequence length
+            device_rank: Number of devices for data parallelism
+            label: Filter shards by label ('train' or 'val')
+            quiet: Suppress logging
+            start_shard: Starting shard index
+            start_shard_pos: Starting position within shard
+            hf_repo: HuggingFace repo ID for downloading
+            num_train_shards: Limit number of train shards (None = all 1030)
+            download: If True, download missing shards from HuggingFace
+        """
+        self.dirpath = Path(dirpath)
+        self.dirpath.mkdir(parents=True, exist_ok=True)
+        self.hf_repo = hf_repo
+        self.num_train_shards = num_train_shards
+        self.download = download
+        super().__init__(
+            batch_size,
+            block_size,
+            device_rank,
+            label,
+            quiet,
+            start_shard=start_shard,
+            start_shard_pos=start_shard_pos,
+        )
+
+    def _list_shards(self, label: str | None) -> list[str]:
+        """Generate list of shard filenames based on label."""
+        shards = []
+
+        if label is None or label == "val":
+            shards.append("fineweb_val_000000.bin")
+
+        if label is None or label == "train":
+            max_train = self.num_train_shards if self.num_train_shards else 1030
+            for i in range(1, max_train + 1):
+                shards.append(f"fineweb_train_{i:06d}.bin")
+
+        logger.info(f"ModdedNanoGPTDataLoader: {len(shards)} shards ({label or 'all'})")
+        return shards
+
+    def _get_shard_path(self, shard_name: str) -> Path:
+        """Get local path for shard, downloading from HuggingFace if needed."""
+        local_path = self.dirpath / shard_name
+
+        if not local_path.exists() and self.download:
+            logger.info(f"Downloading {shard_name} from {self.hf_repo}...")
+            try:
+                from huggingface_hub import hf_hub_download
+
+                hf_hub_download(
+                    repo_id=self.hf_repo,
+                    filename=shard_name,
+                    repo_type="dataset",
+                    local_dir=self.dirpath,
+                )
+            except Exception as e:
+                raise RuntimeError(f"Failed to download {shard_name}: {e}")
+
+        return local_path
+
+    def _load_shard(self) -> np.ndarray:
+        """Load current shard, wrapping around if needed."""
+        if self.cur_shard >= len(self.shards):
+            self.cur_shard = 0
+
+        shard_name = self.shards[self.cur_shard]
+        shard_path = self._get_shard_path(shard_name)
+        tokens = load_bin_shard(shard_path)
+        self.shard_size = len(tokens)
+        return tokens
