@@ -91,7 +91,7 @@ jax.config.update("jax_default_matmul_precision", "BF16_BF16_F32")
 rngs = nnx.Rngs(default=jax.random.key(1337), gate_noise=jax.random.key(42))
 
 config = Config(
-    name="Tiny_MoE_2",
+    name="Tiny_MoE",
     dtype=jnp.bfloat16,
     vocab_size=50304, #49152,
     n_layer=4,
@@ -139,10 +139,10 @@ class TrainerConfig:
     adam_b2: float = 0.95
     warmup_steps: int = max_steps // 100
     print_interval: int = 100
-    val: bool = False
+    val: bool = True
     val_interval: int = 5000
     val_batches: int = 50  # Number of batches to use for validation
-    checkpoint_model: bool = False
+    checkpoint_model: bool = True
     checkpoint_optimizer: bool = False
     checkpoint_interval: int = 10000
 

@@ -1,5 +1,8 @@
 .PHONY: uv cuda cpu
 
+hf:
+	curl -LsSf https://hf.co/cli/install.sh | bash
+
 # Install uv if not already installed
 uv:
 	@if ! command -v uv >/dev/null 2>&1; then \
