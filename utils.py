@@ -180,3 +180,49 @@ def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
     )(model, x, y)
     optimizer.update(model, grads)
     return loss, logits_loss, load_balance_loss, z_loss
+
+
+@nnx.jit
+def compute_val_loss(model, x, y):
+    """Compute loss without computing gradients."""
+    logits, load_balance_loss, z_loss = model(x)
+    logits_loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
+    loss = (
+        logits_loss
+        + model.config.aux_loss_coeff * load_balance_loss
+        + model.config.z_loss_coeff * z_loss
+    )
+    return loss, logits_loss
+
+
+def run_validation(model, val_dataloader, data_sharding, num_batches: int = 50):
+    """
+    Run validation on the model.
+
+    Args:
+        model: The model to validate
+        val_dataloader: Validation dataloader
+        data_sharding: JAX sharding for data
+        num_batches: Number of batches to validate on
+
+    Returns:
+        Tuple of (avg_loss, avg_logits_loss)
+    """
+    # Disable noise and aux losses for validation
+    model.train(add_noise=False, load_balance_loss=False, z_loss=False)
+    total_loss = 0.0
+    total_logits_loss = 0.0
+
+    for _ in range(num_batches):
+        batch, target = val_dataloader()
+        batch = jax.device_put(batch.squeeze(), data_sharding)
+        target = jax.device_put(target.squeeze(), data_sharding)
+        loss, logits_loss = compute_val_loss(model, batch, target)
+        total_loss += loss.item()
+        total_logits_loss += logits_loss.item()
+
+    # Re-enable training mode
+    model.train(add_noise=False, load_balance_loss=True, z_loss=True)
+    return total_loss / num_batches, total_logits_loss / num_batches
+
+
