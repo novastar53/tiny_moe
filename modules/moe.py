@@ -91,7 +91,7 @@ class MoE(nnx.Module):
         x = jax.lax.with_sharding_constraint(x, self.config.expert_partition_spec)
         g = jnp.einsum("enc,ech->enh", x, w_gate) + b_gate
         h = jnp.einsum("enc,ech->enh", x, w_fc) + b_fc
-        h = nnx.silu(g) * h
+        h = (nnx.relu(g)**2) * h
         o = jnp.einsum("enh,ehc->enc", h, w_proj) + b_proj
         o = jax.lax.with_sharding_constraint(o, self.config.expert_partition_spec)
         return o

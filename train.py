@@ -6,7 +6,6 @@
 import os
 
 #os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./alpha-448101-282bc1b884cd.json"
 
 import time
 from datetime import datetime
