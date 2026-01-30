@@ -49,6 +49,6 @@ class GLU(nnx.Module):
     def __call__(self, x):
         g = self.gate(x)
         h = self.fc(x)
-        h = nnx.silu(g) * h
+        h = (nnx.relu(g)**2) * h
         o = self.proj(h)
         return o
