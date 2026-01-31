@@ -126,8 +126,8 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
     num_tokens: int = int(100e9)
-    num_tokens_per_batch: int = 2**18 #2**20 = 1.0 million
-    mB: int = 16 * num_devices
+    num_tokens_per_batch: int = 2**17 #2**20 = 1.0 million
+    mB: int = 8 * num_devices
     T: int = config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
     max_lr: float = 1e-3
@@ -141,7 +141,7 @@ class TrainerConfig:
     val: bool = True
     val_interval: int = 5000
     val_batches: int = 50  # Number of batches to use for validation
-    checkpoint_model: bool = True
+    checkpoint_model: bool = False
     checkpoint_optimizer: bool = False
     checkpoint_interval: int = 10000
 
