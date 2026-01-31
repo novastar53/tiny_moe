@@ -19,6 +19,7 @@ class MoE(nnx.Module):
                 nnx.initializers.normal(stddev=0.02), (None,)
             ),
             bias_init=nnx.with_partitioning(nnx.initializers.zeros, sharding=(None,)),
+            use_bias=True, ## Always use bias for router gate
             dtype=config.dtype,
             rngs=rngs,
         )
