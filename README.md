@@ -12,6 +12,7 @@ Tiny MoE is a minimal implementation of a Mixture-of-Experts (MoE) language mode
 - Built with JAX and Flax NNX for efficient computation
 - GLU (Gated Linear Units) and GLU-based MoE blocks with ReLU² activation
 - Zero-initialized projection layers for improved training stability
+- QK RMSNorm for stabilized attention scores
 - RoPE (Rotary Position Embedding) for better position encoding
 - Model parallelism for Expert layers, data parallelism for non-MoE layers
 - Auxiliary loss for load balancing between experts
@@ -114,7 +115,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 This implementation draws inspiration from and builds upon the work of several key projects:
 
 - [Andrej Karpathy's nanoGPT](https://github.com/karpathy/nanoGPT)
-- [Keller Jordan's modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) - ReLU² activation, zero-init projections
+- [Keller Jordan's modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt) - ReLU² activation, zero-init projections, QK RMSNorm
 - [Huggingface SmolLM](https://huggingface.co/blogs/smollm)
 - [Meta Mobile LLM](https://github.com/facebookresearch/mobile-llm)
 - [Meta LLaMA](https://github.com/facebookresearch/llama)
