@@ -35,3 +35,4 @@ class Config:
     sdpa_implementation: Literal["xla", "cudnn", "slow"] = (
         "xla"  # self-attention kernel implementation
     )
+    value_residual_init: float = 0.5  # Initial lambda for value residual

@@ -20,8 +20,9 @@ from config import Config
 
 
 class Block(nnx.Module):
-    def __init__(self, config: Config, rngs: nnx.Rngs):
+    def __init__(self, config: Config, layer_idx: int, rngs: nnx.Rngs):
         self.config = config
+        self.layer_idx = layer_idx
         self.rms_n_1 = nnx.RMSNorm(
             config.n_embed,
             epsilon=config.ln_epsilon,
@@ -41,8 +42,14 @@ class Block(nnx.Module):
         self.attn = Attention(config, rngs)
         self.moe = MoE(config, rngs)
 
-    def __call__(self, x):
-        x = x + self.attn(self.rms_n_1(x))
+    def __call__(self, x, v1=None, v1_embed=None, value_lambda=None):
+        x = x + self.attn(
+            self.rms_n_1(x),
+            v1=v1,
+            v1_embed=v1_embed,
+            value_lambda=value_lambda,
+            layer_idx=self.layer_idx,
+        )
         o = self.moe(self.rms_n_2(x))
         x = x + o["y"]
         o["y"] = x
@@ -63,7 +70,20 @@ class Tiny_MoE(nnx.Module):
             dtype=config.dtype,
             rngs=rngs,
         )
-        self.h = [Block(config, rngs=rngs) for _ in range(config.n_layer)]
+
+        # Value residual: embedding and per-layer lambda parameters
+        self.value_embed = nnx.Embed(
+            config.vocab_size,
+            config.n_embed,
+            embedding_init=nnx.with_partitioning(nnx.initializers.zeros, (None,)),
+            dtype=config.dtype,
+            rngs=rngs,
+        )
+        self.value_residual_lambdas = nnx.Param(
+            jnp.full(config.n_layer, config.value_residual_init, dtype=config.dtype)
+        )
+
+        self.h = [Block(config, layer_idx=i, rngs=rngs) for i in range(config.n_layer)]
         self.rms_n_f = nnx.RMSNorm(
             config.n_embed,
             dtype=config.dtype,
@@ -72,18 +92,28 @@ class Tiny_MoE(nnx.Module):
         )
 
     def __call__(self, x):
-        x = self.embedding(x)
+        # x is integer indices
+        x_embed = self.embedding(x)
+
+        # Compute v1 from value embedding
+        v1_embed = self.value_embed(x)
+
         total_load_balance_loss = 0
         total_z_loss = 0
         for i in range(self.config.n_layer):
-            out = self.h[i](x)
-            x = out["y"]
+            # Get lambda for this layer
+            value_lambda = self.value_residual_lambdas[i]
+
+            out = self.h[i](
+                x_embed, v1=v1_embed, v1_embed=v1_embed, value_lambda=value_lambda
+            )
+            x_embed = out["y"]
             if self.load_balance_loss:
                 total_load_balance_loss += out["load_balance_loss"]
             if self.z_loss:
                 total_z_loss += out["z_loss"]
-        x = self.rms_n_f(x)
-        logits = self.embedding.attend(x)
+        x_embed = self.rms_n_f(x_embed)
+        logits = self.embedding.attend(x_embed)
         return logits, total_load_balance_loss, total_z_loss
 
 
@@ -110,3 +140,4 @@ if __name__ == "__main__":
         y = m(x)[0]
         assert y.shape == (B, config.block_size, config.vocab_size)
         assert 0 == jnp.count_nonzero(jnp.isnan(y))
+        print("✓ Value residual implementation working!")

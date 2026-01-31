@@ -75,7 +75,7 @@ class Attention(nnx.Module):
             ),
         )
 
-    def __call__(self, x):
+    def __call__(self, x, v1=None, v1_embed=None, value_lambda=None, layer_idx=None):
         B, T, C = x.shape
         nH = self.config.n_head
         nKV = self.config.n_kv_head
@@ -86,6 +86,18 @@ class Attention(nnx.Module):
         q = q.reshape(B, T, nH, C // nH)
         k = k.reshape(B, T, nKV, C // nH)
         v = v.reshape(B, T, nKV, C // nH)
+
+        # Apply value residual: v = v + (1 - lambda) * v1
+        # v1_embed has shape (B, T, n_embed), need to reshape to (B, T, nKV, C//nH)
+        if v1_embed is not None and value_lambda is not None:
+            # v1_embed has been projected by value_embed, so it has dimension n_embed
+            # We need to take only the first nKV * (C//nH) channels to match v
+            v_channels = nKV * (C // nH)
+            v1_reshaped = v1_embed[..., :v_channels].reshape(B, T, nKV, C // nH)
+            # Cast to match v's dtype
+            v1_reshaped = v1_reshaped.astype(v.dtype)
+            value_lambda = jnp.asarray(value_lambda, dtype=v.dtype)
+            v = v + (1 - value_lambda) * v1_reshaped
 
         q = self.q_norm(q)
         k = self.k_norm(k)
@@ -142,15 +154,18 @@ if __name__ == "__main__":
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     from config import Config
 
-    from rope import calc_rope_omega_llama
-
     config = Config(n_embed=8, n_head=2)
-    B, T = 16, config.n_embed
+    B, T = 16, config.block_size
     rngs = nnx.Rngs(0)
-    rope_omega = calc_rope_omega_llama(
-        config.n_embed // config.n_head, config.block_size, config.rope_theta
-    )
-    attn = Attention(config, rope_omega, rngs)
+    attn = Attention(config, rngs)
     x = jax.random.normal(jax.random.key(0), (B, T, config.n_embed))
-    attn(x)
-    assert x.shape == (B, T, config.n_embed)
+
+    # Test without value residual
+    y = attn(x)
+    assert y.shape == (B, T, config.n_embed)
+
+    # Test with value residual
+    v1 = jax.random.normal(jax.random.key(1), (B, T, config.n_embed))
+    value_lambda = 0.5
+    y_vr = attn(x, v1=v1, value_lambda=value_lambda)
+    assert y_vr.shape == (B, T, config.n_embed)
