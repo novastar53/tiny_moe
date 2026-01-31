@@ -75,6 +75,10 @@ class Tiny_MoE(nnx.Module):
             jnp.full(config.n_layer, config.value_residual_init, dtype=config.dtype)
         )
 
+        self.token_residual_lambdas = nnx.Param(
+            jnp.full(config.n_layer, config.token_residual_init, dtype=config.dtype)
+        )
+
         self.h = [Block(config, layer_idx=i, rngs=rngs) for i in range(config.n_layer)]
         self.rms_n_f = nnx.RMSNorm(
             config.n_embed,
@@ -85,11 +89,14 @@ class Tiny_MoE(nnx.Module):
 
     def __call__(self, x):
         x_embed = self.embedding(x)
-        v1 = None  # Will be captured from first block
+        x0 = x_embed  
+        v1 = None  
 
         total_load_balance_loss = 0
         total_z_loss = 0
         for i in range(self.config.n_layer):
+            token_lambda = self.token_residual_lambdas[i]
+            x_embed = token_lambda * x_embed + (1 - token_lambda) * x0
             value_lambda = self.value_residual_lambdas[i]
             out, v1 = self.h[i](x_embed, v1=v1, value_lambda=value_lambda)
             x_embed = out["y"]
@@ -127,4 +134,4 @@ if __name__ == "__main__":
         y = m(x)[0]
         assert y.shape == (B, config.block_size, config.vocab_size)
         assert 0 == jnp.count_nonzero(jnp.isnan(y))
-        print("✓ Value residual implementation working!")
+        print("✓ Token and value residual implementation working!")

@@ -36,3 +36,4 @@ class Config:
         "xla"  # self-attention kernel implementation
     )
     value_residual_init: float = 0.5  # Initial lambda for value residual
+    token_residual_init: float = 1.0  # Initial lambda for token residual (1.0 = pure residual)
