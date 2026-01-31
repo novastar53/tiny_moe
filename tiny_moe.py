@@ -43,7 +43,6 @@ class Block(nnx.Module):
         self.moe = MoE(config, rngs)
 
     def __call__(self, x, v1=None, value_lambda=None):
-        # Attention returns tuple: (attention_output, v1)
         attn_out, v1 = self.attn(
             self.rms_n_1(x),
             v1=v1,
@@ -72,7 +71,6 @@ class Tiny_MoE(nnx.Module):
             rngs=rngs,
         )
 
-        # Value residual: per-layer lambda parameters
         self.value_residual_lambdas = nnx.Param(
             jnp.full(config.n_layer, config.value_residual_init, dtype=config.dtype)
         )
@@ -86,17 +84,13 @@ class Tiny_MoE(nnx.Module):
         )
 
     def __call__(self, x):
-        # x is integer indices
         x_embed = self.embedding(x)
         v1 = None  # Will be captured from first block
 
         total_load_balance_loss = 0
         total_z_loss = 0
         for i in range(self.config.n_layer):
-            # Get lambda for this layer
             value_lambda = self.value_residual_lambdas[i]
-
-            # Block returns tuple: (output_dict, v1)
             out, v1 = self.h[i](x_embed, v1=v1, value_lambda=value_lambda)
             x_embed = out["y"]
 

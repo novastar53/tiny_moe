@@ -52,20 +52,20 @@ class Attention(nnx.Module):
             rngs=rngs,
         )
         head_dim = config.n_embed // config.n_head
-        self.q_norm = nnx.RMSNorm(
-            head_dim,
-            epsilon=config.ln_epsilon,
-            scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
-            dtype=config.dtype,
-            rngs=rngs,
-        )
-        self.k_norm = nnx.RMSNorm(
-            head_dim,
-            epsilon=config.ln_epsilon,
-            scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
-            dtype=config.dtype,
-            rngs=rngs,
-        )
+        #self.q_norm = nnx.RMSNorm(
+        #    head_dim,
+        #    epsilon=config.ln_epsilon,
+        #    scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
+        #    dtype=config.dtype,
+        #    rngs=rngs,
+        #)
+        #self.k_norm = nnx.RMSNorm(
+        #    head_dim,
+        #    epsilon=config.ln_epsilon,
+        #    scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
+        #    dtype=config.dtype,
+        #    rngs=rngs,
+        #)
         self.rope_omega = nnx.Variable(
             calc_rope_omega_llama(
                 config.n_embed // config.n_head,
@@ -87,17 +87,14 @@ class Attention(nnx.Module):
         k = k.reshape(B, T, nKV, C // nH)
         v = v.reshape(B, T, nKV, C // nH)
 
-        # First block: capture v1 (after reshape, Option C)
-        # Subsequent blocks: apply value residual
         if layer_idx == 0 and v1 is None:
-            v1 = v  # Capture the value vectors from first block
+            v1 = v  
         elif v1 is not None and value_lambda is not None and layer_idx > 0:
-            # Apply residual: v = v + (1 - lambda) * v1
             value_lambda = jnp.asarray(value_lambda, dtype=v.dtype)
             v = v + (1 - value_lambda) * v1
 
-        q = self.q_norm(q)
-        k = self.k_norm(k)
+        #q = self.q_norm(q)
+        #k = self.k_norm(k)
 
         q = apply_rope(q, self.rope_omega)
         k = apply_rope(k, self.rope_omega)
