@@ -75,7 +75,7 @@ class Attention(nnx.Module):
             ),
         )
 
-    def __call__(self, x, v1=None, v1_embed=None, value_lambda=None, layer_idx=None):
+    def __call__(self, x, v1=None, value_lambda=None, layer_idx=None):
         B, T, C = x.shape
         nH = self.config.n_head
         nKV = self.config.n_kv_head
@@ -87,17 +87,14 @@ class Attention(nnx.Module):
         k = k.reshape(B, T, nKV, C // nH)
         v = v.reshape(B, T, nKV, C // nH)
 
-        # Apply value residual: v = v + (1 - lambda) * v1
-        # v1_embed has shape (B, T, n_embed), need to reshape to (B, T, nKV, C//nH)
-        if v1_embed is not None and value_lambda is not None:
-            # v1_embed has been projected by value_embed, so it has dimension n_embed
-            # We need to take only the first nKV * (C//nH) channels to match v
-            v_channels = nKV * (C // nH)
-            v1_reshaped = v1_embed[..., :v_channels].reshape(B, T, nKV, C // nH)
-            # Cast to match v's dtype
-            v1_reshaped = v1_reshaped.astype(v.dtype)
+        # First block: capture v1 (after reshape, Option C)
+        # Subsequent blocks: apply value residual
+        if layer_idx == 0 and v1 is None:
+            v1 = v  # Capture the value vectors from first block
+        elif v1 is not None and value_lambda is not None and layer_idx > 0:
+            # Apply residual: v = v + (1 - lambda) * v1
             value_lambda = jnp.asarray(value_lambda, dtype=v.dtype)
-            v = v + (1 - value_lambda) * v1_reshaped
+            v = v + (1 - value_lambda) * v1
 
         q = self.q_norm(q)
         k = self.k_norm(k)
@@ -144,7 +141,7 @@ class Attention(nnx.Module):
 
         y = jnp.reshape(y, (B, T, C))
         y = self.wproj(y)
-        return y
+        return y, v1
 
 
 if __name__ == "__main__":
@@ -154,18 +151,27 @@ if __name__ == "__main__":
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     from config import Config
 
-    config = Config(n_embed=8, n_head=2)
+    config = Config(n_embed=8, n_head=4, n_kv_head=2)
     B, T = 16, config.block_size
     rngs = nnx.Rngs(0)
     attn = Attention(config, rngs)
     x = jax.random.normal(jax.random.key(0), (B, T, config.n_embed))
 
-    # Test without value residual
-    y = attn(x)
+    # Test first block (captures v1)
+    y, v1_captured = attn(x, layer_idx=0)
+    assert v1_captured is not None
     assert y.shape == (B, T, config.n_embed)
+    print("✓ First block captures v1")
 
-    # Test with value residual
-    v1 = jax.random.normal(jax.random.key(1), (B, T, config.n_embed))
-    value_lambda = 0.5
-    y_vr = attn(x, v1=v1, value_lambda=value_lambda)
-    assert y_vr.shape == (B, T, config.n_embed)
+    # Test subsequent block (uses v1)
+    y2, v1_returned = attn(x, v1=v1_captured, value_lambda=0.5, layer_idx=1)
+    assert v1_returned is v1_captured
+    assert y2.shape == (B, T, config.n_embed)
+    print("✓ Subsequent block uses v1")
+
+    # Test without v1 (backward compatibility)
+    y3, v1_none = attn(x, layer_idx=2)
+    assert y3.shape == (B, T, config.n_embed)
+    print("✓ Backward compatibility works")
+
+    print("\nAll attention tests passed!")

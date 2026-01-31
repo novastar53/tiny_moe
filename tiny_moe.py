@@ -42,18 +42,19 @@ class Block(nnx.Module):
         self.attn = Attention(config, rngs)
         self.moe = MoE(config, rngs)
 
-    def __call__(self, x, v1=None, v1_embed=None, value_lambda=None):
-        x = x + self.attn(
+    def __call__(self, x, v1=None, value_lambda=None):
+        # Attention returns tuple: (attention_output, v1)
+        attn_out, v1 = self.attn(
             self.rms_n_1(x),
             v1=v1,
-            v1_embed=v1_embed,
             value_lambda=value_lambda,
             layer_idx=self.layer_idx,
         )
+        x = x + attn_out
         o = self.moe(self.rms_n_2(x))
         x = x + o["y"]
         o["y"] = x
-        return o
+        return o, v1
 
 
 class Tiny_MoE(nnx.Module):
@@ -71,14 +72,7 @@ class Tiny_MoE(nnx.Module):
             rngs=rngs,
         )
 
-        # Value residual: embedding and per-layer lambda parameters
-        self.value_embed = nnx.Embed(
-            config.vocab_size,
-            config.n_embed,
-            embedding_init=nnx.with_partitioning(nnx.initializers.zeros, (None,)),
-            dtype=config.dtype,
-            rngs=rngs,
-        )
+        # Value residual: per-layer lambda parameters
         self.value_residual_lambdas = nnx.Param(
             jnp.full(config.n_layer, config.value_residual_init, dtype=config.dtype)
         )
@@ -94,9 +88,7 @@ class Tiny_MoE(nnx.Module):
     def __call__(self, x):
         # x is integer indices
         x_embed = self.embedding(x)
-
-        # Compute v1 from value embedding
-        v1_embed = self.value_embed(x)
+        v1 = None  # Will be captured from first block
 
         total_load_balance_loss = 0
         total_z_loss = 0
@@ -104,14 +96,15 @@ class Tiny_MoE(nnx.Module):
             # Get lambda for this layer
             value_lambda = self.value_residual_lambdas[i]
 
-            out = self.h[i](
-                x_embed, v1=v1_embed, v1_embed=v1_embed, value_lambda=value_lambda
-            )
+            # Block returns tuple: (output_dict, v1)
+            out, v1 = self.h[i](x_embed, v1=v1, value_lambda=value_lambda)
             x_embed = out["y"]
+
             if self.load_balance_loss:
                 total_load_balance_loss += out["load_balance_loss"]
             if self.z_loss:
                 total_z_loss += out["z_loss"]
+
         x_embed = self.rms_n_f(x_embed)
         logits = self.embedding.attend(x_embed)
         return logits, total_load_balance_loss, total_z_loss
