@@ -50,49 +50,66 @@ class MoE(nnx.Module):
             )
         )
 
-        b_init = nnx.with_partitioning(
-            nnx.initializers.zeros, sharding=self.config.expert_partition_spec
-        )
-
-        self.b_proj = nnx.Param(
-            b_init(
-                rngs.default(),
-                (config.n_experts, 1, config.n_embed),
+        if config.moe_bias:
+            b_init = nnx.with_partitioning(
+                nnx.initializers.zeros, sharding=self.config.expert_partition_spec
             )
-        )
 
-        self.b_gate = nnx.Param(
-            b_init(
-                rngs.default(),
-                (config.n_experts, 1, config.n_glu_hidden),
+            self.b_proj = nnx.Param(
+                b_init(
+                    rngs.default(),
+                    (config.n_experts, 1, config.n_embed),
+                )
             )
-        )
 
-        self.b_fc = nnx.Param(
-            b_init(
-                rngs.default(),
-                (config.n_experts, 1, config.n_glu_hidden),
+            self.b_gate = nnx.Param(
+                b_init(
+                    rngs.default(),
+                    (config.n_experts, 1, config.n_glu_hidden),
+                )
             )
-        )
+
+            self.b_fc = nnx.Param(
+                b_init(
+                    rngs.default(),
+                    (config.n_experts, 1, config.n_glu_hidden),
+                )
+            )
 
     def _apply_experts(self, x):
-        (x, w_fc, w_gate, w_proj, b_fc, b_gate, b_proj) = dtypes.promote_dtype(
-            (
-                x,
-                self.w_fc.value,
-                self.w_gate.value,
-                self.w_proj.value,
-                self.b_fc,
-                self.b_gate,
-                self.b_proj,
-            ),
-            dtype=self.config.dtype,
-        )
+        if self.config.moe_bias:
+            (x, w_fc, w_gate, w_proj, b_fc, b_gate, b_proj) = dtypes.promote_dtype(
+                (
+                    x,
+                    self.w_fc.value,
+                    self.w_gate.value,
+                    self.w_proj.value,
+                    self.b_fc,
+                    self.b_gate,
+                    self.b_proj,
+                ),
+                dtype=self.config.dtype,
+            )
+        else:
+            (x, w_fc, w_gate, w_proj) = dtypes.promote_dtype(
+                (
+                    x,
+                    self.w_fc.value,
+                    self.w_gate.value,
+                    self.w_proj.value,
+                ),
+                dtype=self.config.dtype,
+            )
         x = jax.lax.with_sharding_constraint(x, self.config.expert_partition_spec)
-        g = jnp.einsum("enc,ech->enh", x, w_gate) + b_gate
-        h = jnp.einsum("enc,ech->enh", x, w_fc) + b_fc
+        g = jnp.einsum("enc,ech->enh", x, w_gate)
+        h = jnp.einsum("enc,ech->enh", x, w_fc)
+        if self.config.moe_bias:
+            g = g + b_gate
+            h = h + b_fc
         h = (nnx.relu(g)**2) * h
-        o = jnp.einsum("enh,ehc->enc", h, w_proj) + b_proj
+        o = jnp.einsum("enh,ehc->enc", h, w_proj)
+        if self.config.moe_bias:
+            o = o + b_proj
         o = jax.lax.with_sharding_constraint(o, self.config.expert_partition_spec)
         return o
 
