@@ -51,6 +51,21 @@ class Attention(nnx.Module):
             dtype=config.dtype,
             rngs=rngs,
         )
+        head_dim = config.n_embed // config.n_head
+        self.q_norm = nnx.RMSNorm(
+            head_dim,
+            epsilon=config.ln_epsilon,
+            scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
+            dtype=config.dtype,
+            rngs=rngs,
+        )
+        self.k_norm = nnx.RMSNorm(
+            head_dim,
+            epsilon=config.ln_epsilon,
+            scale_init=nnx.with_partitioning(nnx.initializers.ones, (None,)),
+            dtype=config.dtype,
+            rngs=rngs,
+        )
         self.rope_omega = nnx.Variable(
             calc_rope_omega_llama(
                 config.n_embed // config.n_head,
@@ -71,6 +86,9 @@ class Attention(nnx.Module):
         q = q.reshape(B, T, nH, C // nH)
         k = k.reshape(B, T, nKV, C // nH)
         v = v.reshape(B, T, nKV, C // nH)
+
+        q = self.q_norm(q)
+        k = self.k_norm(k)
 
         q = apply_rope(q, self.rope_omega)
         k = apply_rope(k, self.rope_omega)
