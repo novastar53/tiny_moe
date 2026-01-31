@@ -372,7 +372,7 @@ class HuggingfaceDataLoader(BaseDataLoader):
             for i in range(1, max_train + 1):
                 shards.append(f"fineweb_train_{i:06d}.bin")
 
-        logger.info(f"ModdedNanoGPTDataLoader: {len(shards)} shards ({label or 'all'})")
+        logger.info(f"HuggingfaceDataloader: {len(shards)} shards ({label or 'all'})")
         return shards
 
     def _get_shard_path(self, shard_name: str) -> Path:
