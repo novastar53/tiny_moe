@@ -7,6 +7,7 @@ import os
 
 #os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -95,12 +96,12 @@ config = Config(
     name="Tiny_MoE",
     dtype=jnp.bfloat16,
     vocab_size=50304, #49152,
-    n_layer=30,
+    n_layer=32,
     block_size=2048,
     n_head=12,
     n_kv_head=4,
-    n_embed=672,
-    n_glu_hidden=2048,
+    n_embed=576,
+    n_glu_hidden=1536,
     moe_bias=True,
     mlp_bias=False,
     attention_bias=False,
@@ -128,8 +129,8 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
     num_tokens: int = int(100e9)
-    num_tokens_per_batch: int = 2**18 #2**20 = 1.0 million
-    mB: int = 16 * num_devices
+    num_tokens_per_batch: int = 2**17 * num_devices #2**20 = 1.0 million
+    mB: int = 64 * num_devices
     T: int = config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
     max_lr: float = 1e-3

@@ -273,25 +273,44 @@ def plot_lr_schedule(max_steps, max_lr, warmup_ratio, width=80, height=20):
 
     # Create plot
     plt.plot_size(width, height)
-    plt.plot(steps_list, lrs_list, marker="*", label="Learning Rate")
+    plt.plot(steps_list, lrs_list, color="white")
+
+    # Add vertical line marking warmup end
+    lr_min = float(lrs.min())
+    lr_max = float(lrs.max())
+    plt.plot([warmup_steps, warmup_steps], [lr_min, lr_max], color="white")
+
+    # Completely black with white content
+    plt.canvas_color("black")
+    plt.axes_color("black")
+    plt.ticks_color("white")
+
+    # White grid
+    plt.grid(True, "white")
+
     plt.title(f"Inverse Sqrt LR Schedule (max_lr={max_lr}, warmup={warmup_steps})")
-    plt.xlabel("Training Step")
+    plt.xlabel(
+        f"Training Step      ← Warmup End → Cooling Start (Step {warmup_steps:,})"
+    )
     plt.ylabel("Learning Rate")
-    plt.grid(True)
+
     plt.show()
 
-    # Print statistics
+    # Print statistics with warmup phase information
     max_lr_actual = float(lrs[:warmup_steps].max()) if warmup_steps > 0 else max_lr
-    min_lr_actual = float(lrs[warmup_steps:].min()) if warmup_steps < max_steps else max_lr
+    min_lr_actual = (
+        float(lrs[warmup_steps:].min()) if warmup_steps < max_steps else max_lr
+    )
 
     print(f"\n{'='*60}")
     print(f"Learning Rate Schedule Statistics:")
     print(f"{'='*60}")
     print(f"  Total steps:     {max_steps:,}")
-    print(f"  Warmup steps:    {warmup_steps:,} ({warmup_ratio*100:.1f}%)")
+    print(f"  Warmup phase:    0 → {warmup_steps:,} steps ({warmup_ratio*100:.1f}%)")
+    print(
+        f"  Cooling phase:   {warmup_steps:,} → {max_steps:,} steps ({(1-warmup_ratio)*100:.1f}%)"
+    )
     print(f"  Max LR:          {max_lr_actual:.6f}")
     print(f"  Min LR:          {min_lr_actual:.6f}")
     print(f"  LR decay:        inverse sqrt (1/√step)")
     print(f"{'='*60}\n")
-
-
