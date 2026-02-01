@@ -144,7 +144,7 @@ class TrainerConfig:
     val: bool = True
     val_interval: int = 5000
     val_batches: int = 50  # Number of batches to use for validation
-    checkpoint_model: bool = True
+    checkpoint_model: bool = False
     checkpoint_optimizer: bool = False
     checkpoint_interval: int = 10000
 
