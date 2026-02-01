@@ -36,4 +36,3 @@ class Config:
         "xla"  # self-attention kernel implementation
     )
     value_residual_init: float = 0.5  # Initial lambda for value residual
-    logit_softcap: float = 30.0  # Softcap for logits before cross entropy (0 to disable)

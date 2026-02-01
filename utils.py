@@ -163,17 +163,8 @@ def count_params(m: nnx.Module, layer_type: str | None = None) -> int:
     return total_params
 
 
-@jax.remat
-def _softcap(logits, cap):
-    """Softcap logits - remat avoids storing tanh output for backward."""
-    return cap * jnp.tanh(logits / cap)
-
-
 def loss_fn(model, x, y):
     logits, load_balance_loss, z_loss = model(x)
-    # Apply softcap to prevent logit explosion
-    if model.config.logit_softcap > 0:
-        logits = _softcap(logits, model.config.logit_softcap)
     logits_loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
     loss = (
         logits_loss
@@ -196,10 +187,6 @@ def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
 def compute_val_loss(model, x, y):
     """Compute loss without computing gradients."""
     logits, load_balance_loss, z_loss = model(x)
-    # Apply softcap to prevent logit explosion
-    if model.config.logit_softcap > 0:
-        cap = model.config.logit_softcap
-        logits = cap * jnp.tanh(logits / cap)
     logits_loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
     loss = (
         logits_loss
