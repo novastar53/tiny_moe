@@ -100,8 +100,8 @@ config = Config(
     block_size=2048,
     n_head=12,
     n_kv_head=4,
-    n_embed=576,
-    n_glu_hidden=1536,
+    n_embed=672,
+    n_glu_hidden=2048,
     moe_bias=True,
     mlp_bias=False,
     attention_bias=False,
@@ -144,7 +144,7 @@ class TrainerConfig:
     val: bool = True
     val_interval: int = 5000
     val_batches: int = 50  # Number of batches to use for validation
-    checkpoint_model: bool = True
+    checkpoint_model: bool = False
     checkpoint_optimizer: bool = False
     checkpoint_interval: int = 10000
 
