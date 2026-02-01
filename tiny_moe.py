@@ -87,12 +87,27 @@ class Tiny_MoE(nnx.Module):
         x_embed = self.embedding(x)
         v1 = None  # Will be captured from first block
 
+        # U-Net skip connection stack (LIFO)
+        # Stores full activations: shape (B, T, n_embed)
+        skip_connections = []
+
         total_load_balance_loss = 0
         total_z_loss = 0
+
         for i in range(self.config.n_layer):
+            # Apply skip connection BEFORE block (if this is a skip_out layer)
+            if i in self.config.unet_skip_out_layers and skip_connections:
+                skip_value = skip_connections.pop()  # (B, T, n_embed)
+                x_embed = x_embed + skip_value
+
+            # Process through block
             value_lambda = self.value_residual_lambdas[i]
             out, v1 = self.h[i](x_embed, v1=v1, value_lambda=value_lambda)
             x_embed = out["y"]
+
+            # Save for skip connection AFTER block (if this is a skip_in layer)
+            if i in self.config.unet_skip_in_layers:
+                skip_connections.append(x_embed)
 
             if self.load_balance_loss:
                 total_load_balance_loss += out["load_balance_loss"]
@@ -109,7 +124,10 @@ if __name__ == "__main__":
 
     os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
-    config = Config()
+    config = Config(
+        unet_skip_in_layers=(0, 1),
+        unet_skip_out_layers=(2, 3),
+    )
     mesh = jax.sharding.Mesh(jax.devices(), ["devices"])
     sharding = jax.sharding.NamedSharding(mesh, config.expert_partition_spec)
 
@@ -127,4 +145,3 @@ if __name__ == "__main__":
         y = m(x)[0]
         assert y.shape == (B, config.block_size, config.vocab_size)
         assert 0 == jnp.count_nonzero(jnp.isnan(y))
-        print("✓ Value residual implementation working!")

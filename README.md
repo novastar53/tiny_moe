@@ -12,10 +12,11 @@ Tiny MoE is a minimal implementation of a Mixture-of-Experts (MoE) language mode
 - Built with JAX and Flax NNX for efficient computation
 - GLU (Gated Linear Units) and GLU-based MoE blocks with ReLU² activation
 - Zero-initialized projection layers for improved training stability
-- QK RMSNorm for stabilized attention scores
+- Grouped Query Attention (GQA) 
 - RoPE (Rotary Position Embedding) for better position encoding
+- Value residual connections with learnable mixing parameters
 - Model parallelism for Expert layers, data parallelism for non-MoE layers
-- Auxiliary loss for load balancing between experts
+- Auxiliary loss for load balancing between experts (load balance loss + z-loss)
 
 ## Requirements
 
@@ -57,12 +58,22 @@ The above commands will install all required dependencies including development 
 
 ## Model Architecture
 
-The model consists of alternating MOE and GLU blocks:
+The model follows a standard transformer architecture with MoE feed-forward layers:
 
-- **MOE Block**: Combines attention mechanism with mixture-of-experts routing
-- **GLU Block**: Uses gated linear units for non-linear transformations
-- **Attention**: Implements multi-head attention with RoPE positional embeddings
-- **RMSNorm**: Used for layer normalization
+```
+Tiny_MoE
+├── Embedding
+├── n_layer Blocks (each has):
+│   ├── RMSNorm → Attention (GQA + RoPE + Value Residual)
+│   └── RMSNorm → MoE (router + ReLU²-gated experts)
+├── Final RMSNorm
+└── Output Linear (tied to embedding)
+```
+
+- **Attention**: Multi-head attention with Grouped Query Attention and RoPE positional embeddings
+- **MoE**: Top-k expert routing with load balancing and z-loss regularization
+- **Value Residual**: First layer's V is saved and mixed into subsequent layers via learnable lambdas
+- **RMSNorm**: Used for layer normalization throughout
 
 
 ## Training
