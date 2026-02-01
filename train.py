@@ -109,6 +109,7 @@ config = Config(
     z_loss_coeff=5e-4,
     expert_load_factor=1.25,
     ln_epsilon=1e-5,
+    logit_softcap=30.0,
     sdpa_implementation="cudnn" if device == "gpu" else "xla",
 )
 train_logger.info(f"Model config:\n{pformat(config)}")
