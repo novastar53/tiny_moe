@@ -12,7 +12,6 @@ Tiny MoE is a minimal implementation of a Mixture-of-Experts (MoE) language mode
 - Built with JAX and Flax NNX for efficient computation
 - GLU (Gated Linear Units) and GLU-based MoE blocks with ReLU² activation
 - Zero-initialized projection layers for improved training stability
-- QK RMSNorm for stabilized attention scores
 - RoPE (Rotary Position Embedding) for better position encoding
 - Model parallelism for Expert layers, data parallelism for non-MoE layers
 - Auxiliary loss for load balancing between experts
