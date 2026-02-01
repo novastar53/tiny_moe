@@ -110,6 +110,11 @@ config = Config(
     expert_load_factor=1.25,
     ln_epsilon=1e-5,
     sdpa_implementation="cudnn" if device == "gpu" else "xla",
+    # U-Net skip connections
+    unet_skip_in_layers=tuple(range(0, 15)),   # First half: layers 0-14
+    unet_skip_out_layers=tuple(range(15, 30)), # Second half: layers 15-29
+    skip_gate_input_dim=12,
+    skip_lambda_init=-1.5,  # sigmoid(-1.5) ≈ 0.18
 )
 train_logger.info(f"Model config:\n{pformat(config)}")
 

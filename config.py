@@ -38,3 +38,5 @@ class Config:
     value_residual_init: float = 0.5
     unet_skip_in_layers: tuple = tuple(range(0, 15))  # Layers to save from (first half)
     unet_skip_out_layers: tuple = tuple(range(15, 30))# Layers to add to (second half, LIFO order)
+    skip_gate_input_dim: int = 12  # Number of input features for skip gate
+    skip_lambda_init: float = -1.5  # Initial value (sigmoid(-1.5) ≈ 0.18)

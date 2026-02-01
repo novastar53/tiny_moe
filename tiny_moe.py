@@ -75,6 +75,19 @@ class Tiny_MoE(nnx.Module):
             jnp.full(config.n_layer, config.value_residual_init, dtype=config.dtype)
         )
 
+        # Skip connection gating parameters
+        self.skip_lambda = nnx.Param(
+            jnp.array(config.skip_lambda_init, dtype=config.dtype)
+        )
+        self.skip_gate = nnx.Linear(
+            config.skip_gate_input_dim,
+            1,
+            use_bias=False,
+            kernel_init=nnx.initializers.zeros,  # Start with zero gate
+            dtype=config.dtype,
+            rngs=rngs,
+        )
+
         self.h = [Block(config, layer_idx=i, rngs=rngs) for i in range(config.n_layer)]
         self.rms_n_f = nnx.RMSNorm(
             config.n_embed,
@@ -85,6 +98,7 @@ class Tiny_MoE(nnx.Module):
 
     def __call__(self, x):
         x_embed = self.embedding(x)
+        x0 = x_embed  # Save original embedding for skip gating
         v1 = None  # Will be captured from first block
 
         # U-Net skip connection stack (LIFO)
@@ -98,7 +112,12 @@ class Tiny_MoE(nnx.Module):
             # Apply skip connection BEFORE block (if this is a skip_out layer)
             if i in self.config.unet_skip_out_layers and skip_connections:
                 skip_value = skip_connections.pop()  # (B, T, n_embed)
-                x_embed = x_embed + skip_value
+                # Gated skip connection
+                gate = (
+                    jax.nn.sigmoid(self.skip_lambda) * 2 *
+                    jax.nn.sigmoid(self.skip_gate(x0[..., :self.config.skip_gate_input_dim]))
+                )
+                x_embed = x_embed + gate * skip_value
 
             # Process through block
             value_lambda = self.value_residual_lambdas[i]
