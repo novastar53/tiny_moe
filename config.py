@@ -35,7 +35,6 @@ class Config:
     sdpa_implementation: Literal["xla", "cudnn", "slow"] = (
         "xla"  # self-attention kernel implementation
     )
-    value_residual_init: float = 0.5  # Initial lambda for value residual
-    # U-Net skip connection configuration
-    unet_skip_in_layers: tuple = ()  # Layers to save from (first half)
-    unet_skip_out_layers: tuple = ()  # Layers to add to (second half, LIFO order)
+    value_residual_init: float = 0.5
+    unet_skip_in_layers: tuple = tuple(range(0, 15))  # Layers to save from (first half)
+    unet_skip_out_layers: tuple = tuple(range(15, 30))# Layers to add to (second half, LIFO order)
