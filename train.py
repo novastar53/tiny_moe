@@ -129,8 +129,8 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 @dataclass
 class TrainerConfig:
     num_tokens: int = int(100e9)
-    num_tokens_per_batch: int = 2**17 * num_devices #2**20 = 1.0 million
-    mB: int = 64 * num_devices
+    num_tokens_per_batch: int = 2**15 * num_devices #2**20 = 1.0 million
+    mB: int = 16 * num_devices
     T: int = config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
     max_lr: float = 1e-3
@@ -276,7 +276,7 @@ with mesh:
                     )
 
                 tokens_processed = (step + 1) * trconf.mB * trconf.T
-                lr = inverse_sqrt_schedule(step)
+                lr = inverse_sqrt_schedule(step, trconf.max_lr, trconf.warmup_steps)
                 avg_loss = avg_loss.item()
                 logits_loss = logits_loss.item()
                 load_balance_loss = load_balance_loss.item()
