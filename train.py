@@ -35,6 +35,8 @@ from utils import (
     step_fn,
     append_to_csv,
     run_validation,
+    inverse_sqrt_schedule,
+    plot_lr_schedule,
 )
 
 
@@ -149,13 +151,6 @@ class TrainerConfig:
 trconf = TrainerConfig()
 
 
-# Set up optimizer
-def inverse_sqrt_schedule(step):
-    warmup_lr = trconf.max_lr * (step + 1) / trconf.warmup_steps
-    regular_lr = trconf.max_lr * jnp.sqrt(trconf.warmup_steps) / jnp.sqrt(step + 1)
-    return jnp.where(step < trconf.warmup_steps, warmup_lr, regular_lr)
-
-
 # Generate a weight decay mask
 # Exclude biases and layer norm /rms norm parameters
 graphdef, params, _ = nnx.split(m, nnx.Param, nnx.Variable)
@@ -166,7 +161,7 @@ weight_decay_mask = jax.tree.map(
 tx = optax.chain(
     optax.clip_by_global_norm(trconf.max_grad_norm),
     optax.adamw(
-        inverse_sqrt_schedule,
+        lambda step: inverse_sqrt_schedule(step, trconf.max_lr, trconf.warmup_steps),
         b1=trconf.adam_b1,
         b2=trconf.adam_b2,
         weight_decay=trconf.weight_decay,
@@ -191,6 +186,19 @@ train_logger.info(f"Weight decay param count: {weight_decay_param_count:,}")
 train_logger.info(f"Training config:\n{pformat(trconf)}")
 train_logger.info(f"Effective batch size per device: {trconf.mB // num_devices}")
 assert trconf.mB * trconf.T == trconf.num_tokens_per_batch
+
+# Plot learning rate schedule before training
+print("\n" + "="*60)
+print("Learning Rate Schedule Visualization")
+print("="*60 + "\n")
+
+plot_lr_schedule(
+    max_steps=trconf.max_steps,
+    max_lr=trconf.max_lr,
+    warmup_ratio=trconf.warmup_steps / trconf.max_steps,
+    width=100,
+    height=20,
+)
 
 # Set up Dataloader
 

@@ -7,6 +7,7 @@ from english_words import get_english_words_set
 from google.cloud import storage
 
 import jax
+import jax.numpy as jnp
 import flax.nnx as nnx
 import optax
 import orbax.checkpoint as ocp
@@ -224,5 +225,73 @@ def run_validation(model, val_dataloader, data_sharding, num_batches: int = 50):
     # Re-enable training mode
     model.train(add_noise=False, load_balance_loss=True, z_loss=True)
     return total_loss / num_batches, total_logits_loss / num_batches
+
+
+def inverse_sqrt_schedule(step, max_lr, warmup_steps):
+    """
+    Inverse square root learning rate schedule.
+
+    Args:
+        step: Current training step
+        max_lr: Maximum learning rate
+        warmup_steps: Number of warmup steps
+
+    Returns:
+        Learning rate for the given step
+    """
+    warmup_lr = max_lr * (step + 1) / warmup_steps
+    regular_lr = max_lr * jnp.sqrt(warmup_steps) / jnp.sqrt(step + 1)
+    return jnp.where(step < warmup_steps, warmup_lr, regular_lr)
+
+
+def plot_lr_schedule(max_steps, max_lr, warmup_ratio, width=80, height=20):
+    """
+    Plot the inverse square root learning rate schedule using ASCII art.
+
+    Args:
+        max_steps: Total number of training steps
+        max_lr: Maximum learning rate
+        warmup_ratio: Fraction of training for warmup (default 0.01)
+        width: Plot width in characters
+        height: Plot height in characters
+    """
+    try:
+        import plotext as plt
+    except ImportError:
+        print("plotext not found. Install with: uv add plotext")
+        raise
+
+    warmup_steps = int(max_steps * warmup_ratio)
+
+    # Generate schedule
+    steps = jnp.arange(max_steps)
+    lrs = inverse_sqrt_schedule(steps, max_lr, warmup_steps)
+
+    # Convert to Python lists for plotext
+    steps_list = steps.tolist()
+    lrs_list = lrs.tolist()
+
+    # Create plot
+    plt.plot_size(width, height)
+    plt.plot(steps_list, lrs_list, marker="*", label="Learning Rate")
+    plt.title(f"Inverse Sqrt LR Schedule (max_lr={max_lr}, warmup={warmup_steps})")
+    plt.xlabel("Training Step")
+    plt.ylabel("Learning Rate")
+    plt.grid(True)
+    plt.show()
+
+    # Print statistics
+    max_lr_actual = float(lrs[:warmup_steps].max()) if warmup_steps > 0 else max_lr
+    min_lr_actual = float(lrs[warmup_steps:].min()) if warmup_steps < max_steps else max_lr
+
+    print(f"\n{'='*60}")
+    print(f"Learning Rate Schedule Statistics:")
+    print(f"{'='*60}")
+    print(f"  Total steps:     {max_steps:,}")
+    print(f"  Warmup steps:    {warmup_steps:,} ({warmup_ratio*100:.1f}%)")
+    print(f"  Max LR:          {max_lr_actual:.6f}")
+    print(f"  Min LR:          {min_lr_actual:.6f}")
+    print(f"  LR decay:        inverse sqrt (1/√step)")
+    print(f"{'='*60}\n")
 
 
