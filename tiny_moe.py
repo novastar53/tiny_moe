@@ -114,7 +114,7 @@ class Tiny_MoE(nnx.Module):
                 skip_value = skip_connections.pop()  # (B, T, n_embed)
                 # Gated skip connection
                 gate = (
-                    jax.nn.sigmoid(self.skip_lambda) * 2 *
+                    jax.nn.sigmoid(self.skip_lambda.value) * 2 *
                     jax.nn.sigmoid(self.skip_gate(x0[..., :self.config.skip_gate_input_dim]))
                 )
                 x_embed = x_embed + gate * skip_value
