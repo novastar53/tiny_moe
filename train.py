@@ -283,6 +283,13 @@ with mesh:
                 load_balance_loss = load_balance_loss.item()
                 z_loss = z_loss.item()
 
+                # Calculate ETA
+                remaining_steps = trconf.max_steps - step
+                eta_seconds = remaining_steps * iter_time
+                eta_hours = int(eta_seconds // 3600)
+                eta_minutes = int((eta_seconds % 3600) // 60)
+                eta_str = f"{eta_hours}h {eta_minutes}m" if iter_time > 0 else "calculating..."
+
                 train_losses.append((step, avg_loss))
                 append_to_csv(
                     log_dir / f"{run_name}_train.csv",
@@ -305,7 +312,8 @@ with mesh:
                     f"z loss: {z_loss:0.4f} | "
                     f"avg iter time: {iter_time*1000:0.2f}ms | "
                     f"avg tok/sec: {tokens_per_sec:,.2f} | "
-                    f"tokens processed: {tokens_processed:,}"
+                    f"tokens processed: {tokens_processed:,} | "
+                    f"ETA: {eta_str}"
                 )
                 start = time.time()
             if trconf.val and step > 0 and step % trconf.val_interval == 0:
