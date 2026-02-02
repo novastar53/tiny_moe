@@ -1,3 +1,5 @@
+import math
+
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
@@ -120,7 +122,7 @@ class Attention(nnx.Module):
                     q,
                     k,
                     v,
-                    softmax_scale=1.0 / jnp.sqrt(head_dim),
+                    softmax_scale=1.0 / math.sqrt(head_dim),
                     is_causal=True,
                     window_size=self.config.window_size,
                 )
