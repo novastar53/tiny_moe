@@ -111,7 +111,7 @@ config = Config(
     ln_epsilon=1e-5,
     logit_softcap=30.0,
     sdpa_implementation="flash_attn_jax" if device == "gpu" else "xla",
-    window_size=(512, 512),  # sliding window attention (-1, -1) = full attention
+    window_size=(512, 0),  # sliding window attention (-1, -1) = full attention
 )
 train_logger.info(f"Model config:\n{pformat(config)}")
 
