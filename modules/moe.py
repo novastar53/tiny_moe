@@ -107,7 +107,7 @@ class MoE(nnx.Module):
         if self.config.moe_bias:
             g = g + b_gate
             h = h + b_fc
-        h = (nnx.relu(g)**2) * h
+        h = (jax.nn.relu(g)**2) * h
         o = jnp.einsum("enh,ehc->enc", h, w_proj)
         if self.config.moe_bias:
             o = o + b_proj

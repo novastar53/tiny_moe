@@ -172,17 +172,13 @@ if __name__ == "__main__":
     y, v1_captured = attn(x, layer_idx=0)
     assert v1_captured is not None
     assert y.shape == (B, T, config.n_embed)
-    print("✓ First block captures v1")
 
     # Test subsequent block (uses v1)
     y2, v1_returned = attn(x, v1=v1_captured, value_lambda=0.5, layer_idx=1)
     assert v1_returned is v1_captured
     assert y2.shape == (B, T, config.n_embed)
-    print("✓ Subsequent block uses v1")
 
     # Test without v1 (backward compatibility)
     y3, v1_none = attn(x, layer_idx=2)
     assert y3.shape == (B, T, config.n_embed)
-    print("✓ Backward compatibility works")
-
     print("\nAll attention tests passed!")
