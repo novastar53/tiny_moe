@@ -239,6 +239,7 @@ with mesh:
             "time",
             "tokens_processed",
             "tokens_per_sec",
+            "elapsed_seconds",
         ],
     )
     if trconf.val:
@@ -247,6 +248,7 @@ with mesh:
             ["step", "loss", "logits_loss"],
         )
     train_logger.info(f"Starting from step: {optimizer.step.value.item()}")
+    training_start_time = time.time()
     start = False
     data_sharding = NamedSharding(
         mesh,
@@ -288,7 +290,13 @@ with mesh:
                 load_balance_loss_val = load_balance_loss.item()
                 z_loss_val = z_loss.item()
 
-                # Calculate ETA
+                # Calculate elapsed and ETA
+                elapsed_seconds = time.time() - training_start_time
+                elapsed_hours = int(elapsed_seconds // 3600)
+                elapsed_minutes = int((elapsed_seconds % 3600) // 60)
+                elapsed_secs = int(elapsed_seconds % 60)
+                elapsed_str = f"{elapsed_hours}h {elapsed_minutes}m {elapsed_secs}s"
+
                 remaining_steps = trconf.max_steps - step
                 eta_seconds = remaining_steps * iter_time
                 eta_hours = int(eta_seconds // 3600)
@@ -307,6 +315,7 @@ with mesh:
                         iter_time * 1000,
                         tokens_processed,
                         tokens_per_sec,
+                        elapsed_seconds,
                     ],
                 )
                 train_logger.info(
@@ -318,6 +327,7 @@ with mesh:
                     f"avg iter time: {iter_time*1000:0.2f}ms | "
                     f"avg tok/sec: {tokens_per_sec:,.2f} | "
                     f"tokens processed: {tokens_processed:,} | "
+                    f"elapsed: {elapsed_str} | "
                     f"ETA: {eta_str}"
                 )
                 start = time.time()
