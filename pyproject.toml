@@ -23,6 +23,8 @@ dev = [
 
 cuda = [
     "jax[cuda12]==0.7.1",
+    "flash-attn-jax",
+    "einops"
 ]
 
 metal = [

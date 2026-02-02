@@ -97,7 +97,7 @@ config = Config(
     dtype=jnp.bfloat16,
     vocab_size=50304, #49152,
     n_layer=30,
-    block_size=2048,
+    block_size=4096,
     n_head=12,
     n_kv_head=4,
     n_embed=672,
@@ -110,7 +110,8 @@ config = Config(
     expert_load_factor=1.25,
     ln_epsilon=1e-5,
     logit_softcap=30.0,
-    sdpa_implementation="cudnn" if device == "gpu" else "xla",
+    sdpa_implementation="flash_attn_jax" if device == "gpu" else "xla",
+    window_size=(512, 0),  # sliding window attention (-1, -1) = full attention
 )
 train_logger.info(f"Model config:\n{pformat(config)}")
 
@@ -131,7 +132,7 @@ train_logger.info(f"Replicated Parameter Count: {total_params - moe_params:,}")
 class TrainerConfig:
     num_tokens: int = int(100e9)
     num_tokens_per_batch: int = 2**15 * num_devices #2**20 = 1.0 million
-    mB: int = 16 * num_devices
+    mB: int = 8 * num_devices
     T: int = config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
     max_lr: float = 8e-3

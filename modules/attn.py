@@ -1,6 +1,10 @@
+import math
+
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
+
+from flash_attn_jax import flash_mha
 
 from .rope import calc_rope_omega_llama, apply_rope
 
@@ -93,11 +97,11 @@ class Attention(nnx.Module):
             value_lambda = jnp.asarray(value_lambda, dtype=v.dtype)
             v = v + (1 - value_lambda) * v1
 
-        q = self.q_norm(q)
-        k = self.k_norm(k)
-
         q = apply_rope(q, self.rope_omega)
         k = apply_rope(k, self.rope_omega)
+
+        q = self.q_norm(q)
+        k = self.k_norm(k)
 
         implementation = self.config.sdpa_implementation
 
@@ -111,6 +115,16 @@ class Attention(nnx.Module):
                     bias=None,
                     is_causal=True,
                     implementation=implementation,
+                )
+            case "flash_attn_jax":
+                head_dim = C // nH
+                y = flash_mha(
+                    q,
+                    k,
+                    v,
+                    softmax_scale=1.0 / math.sqrt(head_dim),
+                    is_causal=True,
+                    window_size=self.config.window_size,
                 )
             case _:
                 _, _, n_head, hs = q.shape

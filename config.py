@@ -32,8 +32,9 @@ class Config:
     expert_partition_spec: PartitionSpec = PartitionSpec(
         "devices",
     )
-    sdpa_implementation: Literal["xla", "cudnn", "slow"] = (
+    sdpa_implementation: Literal["xla", "cudnn", "flash_attn_jax", "slow"] = (
         "xla"  # self-attention kernel implementation
     )
+    window_size: tuple[int, int] = (-1, -1)  # sliding window attention (-1, -1) = full attention
     value_residual_init: float = 0.5  # Initial lambda for value residual
     logit_softcap: float = 30.0  # Softcap for logits before cross entropy (0 to disable)
