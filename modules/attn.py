@@ -2,11 +2,7 @@ import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 
-try:
-    from flash_attn_jax import flash_mha
-    FLASH_ATTN_AVAILABLE = True
-except ImportError:
-    FLASH_ATTN_AVAILABLE = False
+from flash_attn_jax import flash_mha
 
 from .rope import calc_rope_omega_llama, apply_rope
 
@@ -119,11 +115,6 @@ class Attention(nnx.Module):
                     implementation=implementation,
                 )
             case "flash_attn_jax":
-                if not FLASH_ATTN_AVAILABLE:
-                    raise ImportError(
-                        "flash_attn_jax not installed. "
-                        "Install with: pip install flash-attn-jax"
-                    )
                 head_dim = C // nH
                 y = flash_mha(
                     q,
