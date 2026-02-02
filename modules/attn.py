@@ -97,11 +97,11 @@ class Attention(nnx.Module):
             value_lambda = jnp.asarray(value_lambda, dtype=v.dtype)
             v = v + (1 - value_lambda) * v1
 
-        q = self.q_norm(q)
-        k = self.k_norm(k)
-
         q = apply_rope(q, self.rope_omega)
         k = apply_rope(k, self.rope_omega)
+
+        q = self.q_norm(q)
+        k = self.k_norm(k)
 
         implementation = self.config.sdpa_implementation
 
