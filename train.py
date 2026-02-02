@@ -111,6 +111,7 @@ config = Config(
     ln_epsilon=1e-5,
     logit_softcap=30.0,
     sdpa_implementation="cudnn" if device == "gpu" else "xla",
+    window_size=(-1, -1),  # sliding window attention (-1, -1) = full attention
 )
 train_logger.info(f"Model config:\n{pformat(config)}")
 
