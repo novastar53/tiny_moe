@@ -134,7 +134,7 @@ class TrainerConfig:
     mB: int = 16 * num_devices
     T: int = config.block_size
     max_steps: int = int(num_tokens // num_tokens_per_batch)
-    max_lr: float = 7e-3
+    max_lr: float = 8e-3
     min_lr: float = max_lr * 0.1
     max_grad_norm: float = 1.0  # Clip gradients to this norm
     weight_decay: float = 0.1  # Weight decay for adamw
