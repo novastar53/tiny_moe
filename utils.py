@@ -183,7 +183,7 @@ def loss_fn(model, x, y):
     return loss, (logits_loss, load_balance_loss, z_loss)
 
 
-@nnx.jit
+@nnx.jit(donate_argnums=(2, 3))
 def step_fn(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
     (loss, (logits_loss, load_balance_loss, z_loss)), grads = nnx.value_and_grad(
         loss_fn, has_aux=True

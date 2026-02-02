@@ -255,16 +255,21 @@ with mesh:
         ),
     )
     m.train(add_noise=False, load_balance_loss=True, z_loss=True)
+    step = int(optimizer.step.value)  # Sync once at start
     try:
-        while optimizer.step.value.item() < trconf.max_steps:
-            step = optimizer.step.value.item()
+        while step < trconf.max_steps:
             batch, target = train_dl()
             batch = jax.device_put(batch.squeeze(), data_sharding)
             target = jax.device_put(target.squeeze(), data_sharding)
             avg_loss, logits_loss, load_balance_loss, z_loss = step_fn(
                 m, optimizer, batch, target
             )
+            step += 1  # Python-side counter, no sync
+
             if step % trconf.print_interval == 0:
+                # Only sync with device when printing
+                jax.block_until_ready(avg_loss)
+
                 if start is False:
                     start = time.time()
                     iter_time = 0
@@ -276,12 +281,12 @@ with mesh:
                         trconf.print_interval * trconf.mB * trconf.T / total_time
                     )
 
-                tokens_processed = (step + 1) * trconf.mB * trconf.T
+                tokens_processed = step * trconf.mB * trconf.T
                 lr = inverse_sqrt_schedule(step, trconf.max_lr, trconf.warmup_steps)
-                avg_loss = avg_loss.item()
-                logits_loss = logits_loss.item()
-                load_balance_loss = load_balance_loss.item()
-                z_loss = z_loss.item()
+                avg_loss_val = avg_loss.item()
+                logits_loss_val = logits_loss.item()
+                load_balance_loss_val = load_balance_loss.item()
+                z_loss_val = z_loss.item()
 
                 # Calculate ETA
                 remaining_steps = trconf.max_steps - step
@@ -290,15 +295,15 @@ with mesh:
                 eta_minutes = int((eta_seconds % 3600) // 60)
                 eta_str = f"{eta_hours}h {eta_minutes}m" if iter_time > 0 else "calculating..."
 
-                train_losses.append((step, avg_loss))
+                train_losses.append((step, avg_loss_val))
                 append_to_csv(
                     log_dir / f"{run_name}_train.csv",
                     [
                         step,
                         lr,
-                        avg_loss,
-                        load_balance_loss,
-                        z_loss,
+                        avg_loss_val,
+                        load_balance_loss_val,
+                        z_loss_val,
                         iter_time * 1000,
                         tokens_processed,
                         tokens_per_sec,
@@ -306,10 +311,10 @@ with mesh:
                 )
                 train_logger.info(
                     f"{step} | lr: {lr:0.4f} | "
-                    f"loss: {avg_loss:0.4f} | "
-                    f"logits loss: {logits_loss:0.4f} | "
-                    f"load balance loss: {load_balance_loss:0.4f} | "
-                    f"z loss: {z_loss:0.4f} | "
+                    f"loss: {avg_loss_val:0.4f} | "
+                    f"logits loss: {logits_loss_val:0.4f} | "
+                    f"load balance loss: {load_balance_loss_val:0.4f} | "
+                    f"z loss: {z_loss_val:0.4f} | "
                     f"avg iter time: {iter_time*1000:0.2f}ms | "
                     f"avg tok/sec: {tokens_per_sec:,.2f} | "
                     f"tokens processed: {tokens_processed:,} | "
