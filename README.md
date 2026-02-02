@@ -80,13 +80,6 @@ python train.py
 ### Learning Rate Schedule
 
 The model uses an **inverse square root** learning rate schedule with linear warmup:
-
-```
-lr(step) = max_lr * (step + 1) / warmup_steps           if step < warmup_steps
-lr(step) = max_lr * sqrt(warmup_steps) / sqrt(step + 1) otherwise
-```
-
-**Default hyperparameters:**
 - Max LR: `8e-3`
 - Warmup: 1% of total training steps
 - Optimizer: AdamW (β₁=0.9, β₂=0.95)
